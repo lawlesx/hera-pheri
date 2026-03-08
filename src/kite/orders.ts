@@ -1,8 +1,10 @@
-import { kite, getQuote } from "./client";
+import type { KiteInstance } from "./client";
+import { getQuote } from "./client";
 import { logTrade } from "../db/trades";
 import type { UserId, OrderResult } from "../types";
 
 export async function placeOrder(
+  kite: KiteInstance,
   action: "BUY" | "SELL",
   symbol: string,
   quantity: number,
@@ -12,15 +14,14 @@ export async function placeOrder(
     const orderId = await kite.placeOrder("regular", {
       exchange: "NSE",
       tradingsymbol: symbol.toUpperCase(),
-      transaction_type: action === "BUY" ? "BUY" : "SELL",
+      transaction_type: action,
       quantity,
-      product: "MIS",          // Intraday — Margin Intraday Square-off
+      product: "MIS",       // Intraday — auto squared off at market close
       order_type: "MARKET",
       validity: "DAY",
     });
 
-    // Fetch last traded price as approximate execution price
-    const price = await getQuote(symbol);
+    const price = await getQuote(kite, symbol);
 
     await logTrade({
       user_id: userId,

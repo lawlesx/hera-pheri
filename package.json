@@ -17,6 +17,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.0",
     "dotenv": "^17.3.1",
-    "kiteconnect": "^5.1.0"
+    "kiteconnect": "^5.1.0",
+    "open": "^11.0.0"
   }
 }

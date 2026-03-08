@@ -1,7 +1,10 @@
 import * as readline from "readline";
+import type { KiteInstance } from "../kite/client";
+import { createKiteClient, isMarketOpen, getQuote } from "../kite/client";
+import { runKiteLogin } from "../kite/auth";
+import { getValidAccessToken } from "../db/tokens";
 import { placeOrder } from "../kite/orders";
 import { getTradeHistory } from "../db/trades";
-import { getQuote, isMarketOpen } from "../kite/client";
 import type { UserId } from "../types";
 
 const VALID_USERS: UserId[] = ["lawless", "splinter"];
@@ -22,40 +25,68 @@ function printHelp(): void {
   sell <SYMBOL> <QTY>     Place a market SELL order
   quote <SYMBOL>          Get current price of a stock
   history                 Show your last 20 trades
-  help                    Show this message
+  help                    Show this help
   exit                    Exit the bot
 `);
 }
 
-async function askUser(): Promise<UserId> {
+async function askQuestion(prompt: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => {
-    const ask = () => {
-      rl.question("👤 Who are you? (lawless/splinter): ", (answer) => {
-        const id = answer.trim().toLowerCase() as UserId;
-        if (VALID_USERS.includes(id)) {
-          rl.close();
-          resolve(id);
-        } else {
-          console.log("❌ Invalid user. Enter 'lawless' or 'splinter'.");
-          ask();
-        }
-      });
-    };
-    ask();
+    rl.question(prompt, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
   });
+}
+
+async function selectUser(): Promise<UserId> {
+  while (true) {
+    const answer = await askQuestion("👤 Who are you? (lawless/splinter): ");
+    const id = answer.toLowerCase() as UserId;
+    if (VALID_USERS.includes(id)) return id;
+    console.log("❌ Invalid user. Enter 'lawless' or 'splinter'.");
+  }
+}
+
+/**
+ * Ensure the user has a valid Kite access token.
+ * Returns a ready-to-use KiteConnect instance.
+ */
+async function authenticateUser(userId: UserId): Promise<KiteInstance> {
+  process.stdout.write("🔑 Checking authentication... ");
+
+  let accessToken = await getValidAccessToken(userId);
+
+  if (accessToken) {
+    console.log("✅ Token valid.\n");
+    return createKiteClient(userId, accessToken);
+  }
+
+  console.log("⚠️  Token expired or missing. Starting Kite login...\n");
+  console.log(
+    "📌 Note: Your Kite app's redirect URL must be set to: http://127.0.0.1:3000\n"
+  );
+
+  accessToken = await runKiteLogin(userId);
+  console.log("\n✅ Authentication successful!\n");
+  return createKiteClient(userId, accessToken);
 }
 
 export async function startCLI(): Promise<void> {
   printBanner();
 
-  const userId = await askUser();
+  const userId = await selectUser();
   const userName = userId.charAt(0).toUpperCase() + userId.slice(1);
-  const marketStatus = isMarketOpen() ? "🟢 OPEN" : "🔴 CLOSED";
 
-  console.log(`\n✅ Welcome, ${userName}! Market is ${marketStatus}\n`);
+  const kite = await authenticateUser(userId);
+
+  const marketStatus = isMarketOpen() ? "🟢 OPEN" : "🔴 CLOSED";
+  console.log(`✅ Welcome, ${userName}! Market is ${marketStatus}`);
   if (!isMarketOpen()) {
-    console.log("⚠️  Market is closed. Orders placed outside market hours may be rejected.\n");
+    console.log("⚠️  Market is closed. Orders placed now may be rejected by the broker.\n");
+  } else {
+    console.log();
   }
 
   printHelp();
@@ -79,12 +110,12 @@ export async function startCLI(): Promise<void> {
         const qty = parseInt(parts[2] ?? "", 10);
 
         if (!symbol || isNaN(qty) || qty <= 0) {
-          console.log(`❌ Usage: ${cmd} <SYMBOL> <QTY>  (e.g. ${cmd} RELIANCE 10)`);
+          console.log(`❌ Usage: ${cmd} <SYMBOL> <QTY>   e.g. ${cmd} RELIANCE 10`);
           break;
         }
 
-        console.log(`⏳ Placing ${cmd.toUpperCase()} order — ${qty} × ${symbol.toUpperCase()}...`);
-        const result = await placeOrder(cmd.toUpperCase() as "BUY" | "SELL", symbol, qty, userId);
+        console.log(`⏳ Placing ${cmd.toUpperCase()} — ${qty} × ${symbol.toUpperCase()}...`);
+        const result = await placeOrder(kite, cmd.toUpperCase() as "BUY" | "SELL", symbol, qty, userId);
 
         if (result.status === "success") {
           console.log(`✅ ${result.message}`);
@@ -98,11 +129,11 @@ export async function startCLI(): Promise<void> {
       case "quote": {
         const symbol = parts[1];
         if (!symbol) {
-          console.log("❌ Usage: quote <SYMBOL>  (e.g. quote INFY)");
+          console.log("❌ Usage: quote <SYMBOL>   e.g. quote INFY");
           break;
         }
-        console.log(`⏳ Fetching quote for ${symbol.toUpperCase()}...`);
-        const price = await getQuote(symbol);
+        console.log(`⏳ Fetching price for ${symbol.toUpperCase()}...`);
+        const price = await getQuote(kite, symbol);
         if (price !== null) {
           console.log(`📈 ${symbol.toUpperCase()} — ₹${price.toFixed(2)}`);
         } else {
@@ -128,7 +159,7 @@ export async function startCLI(): Promise<void> {
             console.log(
               [
                 String(i + 1).padEnd(12),
-                t.action.padEnd(12),
+                String(t.action).padEnd(12),
                 String(t.symbol).padEnd(12),
                 String(t.quantity).padEnd(12),
                 t.price ? `₹${Number(t.price).toFixed(2)}`.padEnd(12) : "N/A".padEnd(12),
@@ -157,7 +188,7 @@ export async function startCLI(): Promise<void> {
         break;
 
       default:
-        console.log(`❓ Unknown command: '${cmd}'. Type 'help' to see available commands.`);
+        console.log(`❓ Unknown command '${cmd}'. Type 'help' to see available commands.`);
     }
 
     rl.prompt();

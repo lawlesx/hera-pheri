@@ -1,5 +1,12 @@
 export type UserId = "lawless" | "splinter";
 
+export interface UserSession {
+  userId: UserId;
+  apiKey: string;
+  apiSecret: string;
+  accessToken: string | null;
+}
+
 export interface Trade {
   id?: number;
   user_id: UserId;

@@ -1,41 +1,56 @@
 import { KiteConnect } from "kiteconnect";
+import type { Connect } from "kiteconnect";
+import type { UserId } from "../types";
 
-if (!process.env.KITE_API_KEY) {
-  throw new Error("Missing KITE_API_KEY in environment");
+// KiteInstance is the Connect instance type returned by `new KiteConnect()`
+export type KiteInstance = Connect;
+
+// Load per-user credentials from Railway env vars
+// Format: LAWLESS_KITE_API_KEY, LAWLESS_KITE_API_SECRET
+export function getEnvCredentials(userId: UserId): { apiKey: string; apiSecret: string } {
+  const prefix = userId.toUpperCase();
+  const apiKey = process.env[`${prefix}_KITE_API_KEY`];
+  const apiSecret = process.env[`${prefix}_KITE_API_SECRET`];
+
+  if (!apiKey || !apiSecret) {
+    throw new Error(
+      `Missing env vars: ${prefix}_KITE_API_KEY and/or ${prefix}_KITE_API_SECRET`
+    );
+  }
+
+  return { apiKey, apiSecret };
 }
 
-export const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY });
-
-if (process.env.KITE_ACCESS_TOKEN) {
-  kite.setAccessToken(process.env.KITE_ACCESS_TOKEN);
+// Create a per-user KiteConnect instance with access token set
+export function createKiteClient(userId: UserId, accessToken: string): KiteInstance {
+  const { apiKey } = getEnvCredentials(userId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const kite = new (KiteConnect as any)({ api_key: apiKey }) as KiteInstance;
+  kite.setAccessToken(accessToken);
+  return kite;
 }
 
-/**
- * Checks if the market is currently open (NSE equity: 9:15 AM – 3:30 PM IST, Mon–Fri)
- */
+// Check if the NSE market is currently open (9:15 AM – 3:30 PM IST, Mon–Fri)
 export function isMarketOpen(): boolean {
-  // Get current time in IST (UTC+5:30)
   const now = new Date();
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
   const ist = new Date(utcMs + 5.5 * 60 * 60 * 1000);
 
-  const day = ist.getDay(); // 0 = Sunday, 6 = Saturday
+  const day = ist.getDay();
   if (day === 0 || day === 6) return false;
 
   const totalMins = ist.getHours() * 60 + ist.getMinutes();
-  const marketOpen = 9 * 60 + 15;   // 9:15 AM IST
-  const marketClose = 15 * 60 + 30; // 3:30 PM IST
-
-  return totalMins >= marketOpen && totalMins < marketClose;
+  return totalMins >= 9 * 60 + 15 && totalMins < 15 * 60 + 30;
 }
 
-/**
- * Fetches the last traded price for a given NSE symbol
- */
-export async function getQuote(symbol: string): Promise<number | null> {
+// Fetch last traded price for a symbol
+export async function getQuote(kite: KiteInstance, symbol: string): Promise<number | null> {
   try {
-    const quote = await kite.getQuote([`NSE:${symbol.toUpperCase()}`]);
-    return (quote as Record<string, { last_price: number }>)[`NSE:${symbol.toUpperCase()}`]?.last_price ?? null;
+    const quotes = await kite.getQuote([`NSE:${symbol.toUpperCase()}`]);
+    return (
+      (quotes as Record<string, { last_price: number }>)[`NSE:${symbol.toUpperCase()}`]
+        ?.last_price ?? null
+    );
   } catch {
     return null;
   }
