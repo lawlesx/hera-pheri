@@ -1,4 +1,4 @@
-import KiteConnect from "kiteconnect";
+import { KiteConnect } from "kiteconnect";
 import open from "open";
 import { createServer } from "http";
 import { URL } from "url";

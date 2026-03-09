@@ -29,7 +29,7 @@ export async function getTradeHistory(userId: string): Promise<Trade[]> {
 
 export async function getAllTrades(): Promise<Trade[]> {
   const result = await db.execute({
-    sql: `SELECT t.*, u.name as user_name FROM trades t JOIN users u ON t.user_id = u.id ORDER BY t.executed_at DESC LIMIT 50`,
+    sql: `SELECT t.*, u.id as user_name FROM trades t JOIN users u ON t.user_id = u.id ORDER BY t.executed_at DESC LIMIT 50`,
     args: [],
   });
 
