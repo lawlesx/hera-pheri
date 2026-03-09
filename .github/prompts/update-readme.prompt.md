@@ -1,5 +1,5 @@
 ---
-mode: agent
+agent: agent
 description: Keep the README in sync with the current state of the codebase
 ---
 
