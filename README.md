@@ -99,15 +99,45 @@ bun run start
 ## CLI Commands
 
 ```
-buy <SYMBOL> <QTY>     Place a market BUY order  (e.g. buy RELIANCE 10)
-sell <SYMBOL> <QTY>    Place a market SELL order (e.g. sell TCS 5)
-quote <SYMBOL>         Get the current price of a stock
-history                Show your last 20 trades
-help                   Show command reference
-exit                   Exit the bot
+buy <SYMBOL> <QTY>          Place a market BUY order   (e.g. buy RELIANCE 10)
+sell <SYMBOL> <QTY>         Place a market SELL order  (e.g. sell TCS 5)
+watch <S1> [S2...]          Live price feed — refreshes every 2s (press Enter to stop)
+quote <SYMBOL>              Get the current price of a stock
+positions                   Open positions with unrealised / realised P&L
+orders                      Today's order book with colour-coded status
+history                     Show your last 20 trades
+help                        Show command reference
+exit                        Exit the bot
 ```
 
 > ⚠️ All orders use **MIS (Margin Intraday Square-off)**. Open positions are auto-closed by Zerodha at 3:25 PM IST.
+
+### Live Price Feed (`watch`)
+
+```
+[Lawless] > watch RELIANCE TCS INFY
+
+👁  LIVE FEED — RELIANCE, TCS, INFY  (Press Enter to stop)
+
+────────────────────────────────────────────────────────────────────────────────
+Symbol          LTP             Change          Change%         Volume
+────────────────────────────────────────────────────────────────────────────────
+RELIANCE        ₹2,942.50       +12.30          +0.42%          1,234,567
+TCS             ₹3,810.00       -45.20          -1.17%          567,890
+INFY            ₹1,754.75       +8.90           +0.51%          890,123
+────────────────────────────────────────────────────────────────────────────────
+Updated: 10:32:45 AM
+```
+
+The table rewrites itself in-place using ANSI cursor controls. Green = positive, red = negative.
+
+### Positions P&L (`positions`)
+
+Shows all open MIS positions with avg entry, last traded price, unrealised and realised P&L, and a total footer.
+
+### Order Book (`orders`)
+
+Shows up to 50 of today's orders: time, symbol, BUY/SELL type, quantity, and status (COMPLETE / OPEN / REJECTED highlighted in colour).
 
 ---
 
@@ -136,7 +166,8 @@ hera-pheri/
 │   ├── kite/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
-│   │   └── orders.ts     # placeOrder() — MIS market orders
+│   │   ├── orders.ts     # placeOrder() — MIS market orders
+│   │   └── portfolio.ts  # displayPositions() + displayOrders() — P&L & order book
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
 │   │   ├── migrate.ts    # Schema + user seed
@@ -144,6 +175,9 @@ hera-pheri/
 │   │   └── trades.ts     # Log & fetch trade history
 │   └── cli/
 │       └── prompt.ts     # Interactive CLI loop with auth flow
+├── .github/
+│   └── prompts/
+│       └── update-readme.prompt.md  # Reusable prompt to keep README in sync
 ├── .env.example
 ├── railway.toml
 └── package.json
