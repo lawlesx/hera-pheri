@@ -1,27 +1,27 @@
 # 🐍 Hera-Pheri Trade Bot
 
-NSE Intraday trading bot for two users, each with their own Zerodha account. Built with Bun.js + TypeScript, Kite Connect, Turso, and Railway.
+NSE Intraday trading bot for two users, each with their own Zerodha account. Built with Bun.js + TypeScript, Kite Connect, and SQLite.
 
 ## Stack
 
-| Layer      | Tech                                                    |
-| ---------- | ------------------------------------------------------- |
-| Runtime    | Bun.js + TypeScript                                     |
-| Broker API | Kite Connect (Zerodha)                                  |
-| Database   | Turso (hosted SQLite) — stores daily access tokens only |
-| Deployment | Railway                                                 |
+| Layer      | Tech                                                           |
+| ---------- | -------------------------------------------------------------- |
+| Runtime    | Bun.js + TypeScript                                            |
+| Broker API | Kite Connect (Zerodha)                                         |
+| Database   | SQLite — local file or hosted via [Turso](https://turso.tech/) |
+| Deployment | Local or Railway                                               |
 
 ---
 
 ## Architecture
 
-- **API credentials** (`api_key`, `api_secret`) live in Railway environment variables — never in the DB
-- **Access tokens** (expire daily at 6 AM) are stored per-user in Turso
-- On startup, the bot checks if the token is still valid. If expired, it triggers a Kite OAuth login automatically
+- **API credentials** (`api_key`, `api_secret`) live in env variables — never in the DB
+- **Access tokens** (expire daily at 6 AM) are stored per-user in the DB
+- On startup, the bot checks if the token is still valid. If expired, it triggers Kite OAuth login automatically in your browser
 
 ---
 
-## First-Time Setup
+## Setup
 
 ### 1. Clone & Install
 
@@ -31,56 +31,42 @@ cd hera-pheri
 bun install
 ```
 
-### 2. Set Up Turso
-
-```bash
-# Install Turso CLI
-curl -sSfL https://get.tur.so/install.sh | bash
-
-# Create the database
-turso db create hera-pheri
-
-# Get connection details
-turso db show hera-pheri --url
-turso db tokens create hera-pheri
-```
-
-### 3. Configure Kite Connect Apps
-
-Each user needs their own Kite Connect app at [kite.trade](https://kite.trade/).
-
-> ⚠️ **Important**: Set the **Redirect URL** in each Kite app to:
->
-> ```
-> http://127.0.0.1:3000
-> ```
->
-> This is required for the automatic OAuth token capture to work.
-
-### 4. Configure Environment Variables
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
-# Fill in all values (see .env.example for the format)
+# Fill in your Kite Connect credentials
 ```
 
-**Required env vars:**
+**Minimal `.env` for local use:**
 
-```
+```env
+# Database — local SQLite file, no Turso account needed
+TURSO_DATABASE_URL=file:local.db
+
+# Your Zerodha Kite Connect app credentials
 LAWLESS_KITE_API_KEY=...
 LAWLESS_KITE_API_SECRET=...
 
 SPLINTER_KITE_API_KEY=...
 SPLINTER_KITE_API_SECRET=...
-
-TURSO_DATABASE_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=...
 ```
 
-### 5. Run DB Migrations
+### 3. Kite Connect Setup
+
+Each user needs their own Kite Connect app at [kite.trade](https://kite.trade/).
+
+> ⚠️ **Important**: In each Kite app's settings, set the **Redirect URL** to:
+>
+> ```
+> http://127.0.0.1:3000
+> ```
+
+### 4. Run DB Migrations
 
 ```bash
 bun run migrate
+# Creates local.db with tables + seeds both users
 ```
 
 ---
@@ -91,21 +77,19 @@ bun run migrate
 bun run start
 ```
 
----
-
-## Session Flow
+### Session Flow
 
 ```
 👤 Who are you? (lawless/splinter): lawless
 
 🔑 Checking authentication...
-  ✅ Token valid.              ← if token exists and was issued today
+  ✅ Token valid.              ← token from today exists
   OR
   ⚠️  Token expired. Starting Kite login...
      → Browser opens Kite login page
      → You log in with Zerodha credentials
      → Token captured automatically
-     → ✅ Authentication successful!
+     ✅ Authentication successful!
 
 ✅ Welcome, Lawless! Market is 🟢 OPEN
 ```
@@ -117,22 +101,27 @@ bun run start
 ```
 buy <SYMBOL> <QTY>     Place a market BUY order  (e.g. buy RELIANCE 10)
 sell <SYMBOL> <QTY>    Place a market SELL order (e.g. sell TCS 5)
-quote <SYMBOL>         Get current price of a stock
+quote <SYMBOL>         Get the current price of a stock
 history                Show your last 20 trades
 help                   Show command reference
 exit                   Exit the bot
 ```
 
+> ⚠️ All orders use **MIS (Margin Intraday Square-off)**. Open positions are auto-closed by Zerodha at 3:25 PM IST.
+
 ---
 
-## Deploy on Railway
+## Local vs Cloud (Railway)
 
-1. Push to GitHub
-2. New Railway project → Connect repo
-3. Add all env vars in Railway → Variables
-4. Deploy — `railway.toml` handles the rest
+|              | Local                                    | Railway                             |
+| ------------ | ---------------------------------------- | ----------------------------------- |
+| Database     | `TURSO_DATABASE_URL=file:local.db`       | Turso hosted URL + auth token       |
+| Kite OAuth   | ✅ Works — browser opens on your machine | ⚠️ Needs a separate local auth step |
+| Availability | When your machine is on                  | 24/7                                |
 
-> ⚠️ This bot places **MIS (Margin Intraday Square-off)** orders. All open positions are auto-squared off by Zerodha at market close (3:25 PM IST).
+**Start locally, deploy to Railway when you're ready to go 24/7.**
+
+When deploying to Railway, swap the DB URL to a Turso remote URL and add `TURSO_AUTH_TOKEN` as a Railway env var.
 
 ---
 
@@ -140,21 +129,21 @@ exit                   Exit the bot
 
 ```
 hera-pheri/
-├── index.ts                  # Entrypoint — runs migrations, starts CLI
+├── index.ts              # Entrypoint — runs migrations, starts CLI
 ├── src/
-│   ├── env.ts                # Env loader
-│   ├── types.ts              # Shared types (UserId, Trade, etc.)
+│   ├── env.ts            # Env loader
+│   ├── types.ts          # Shared types
 │   ├── kite/
-│   │   ├── client.ts         # Per-user Kite client factory + market hours
-│   │   ├── auth.ts           # OAuth login — local server + browser open
-│   │   └── orders.ts         # placeOrder() — MIS market orders
+│   │   ├── client.ts     # Per-user Kite client factory + market hours
+│   │   ├── auth.ts       # OAuth login — local server + browser open
+│   │   └── orders.ts     # placeOrder() — MIS market orders
 │   ├── db/
-│   │   ├── client.ts         # Turso connection
-│   │   ├── migrate.ts        # Schema + user seed
-│   │   ├── tokens.ts         # Save/validate daily access tokens
-│   │   └── trades.ts         # Log & fetch trade history
+│   │   ├── client.ts     # SQLite/Turso connection
+│   │   ├── migrate.ts    # Schema + user seed
+│   │   ├── tokens.ts     # Save/validate daily access tokens
+│   │   └── trades.ts     # Log & fetch trade history
 │   └── cli/
-│       └── prompt.ts         # Interactive CLI loop with auth flow
+│       └── prompt.ts     # Interactive CLI loop with auth flow
 ├── .env.example
 ├── railway.toml
 └── package.json
