@@ -106,7 +106,8 @@ quote <SYMBOL>              Get the current price of a stock
 positions                   Open positions with unrealised / realised P&L
 orders                      Today's order book with colour-coded status
 history                     Show your last 20 trades
-help                        Show command reference
+  funds                       Show available cash & margin (equity segment)
+  help                        Show command reference
 exit                        Exit the bot
 ```
 
@@ -167,7 +168,7 @@ hera-pheri/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
 │   │   ├── orders.ts     # placeOrder() — MIS market orders
-│   │   └── portfolio.ts  # displayPositions() + displayOrders() — P&L & order book
+│   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
 │   │   ├── migrate.ts    # Schema + user seed

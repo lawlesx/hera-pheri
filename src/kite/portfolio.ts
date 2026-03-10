@@ -1,4 +1,5 @@
 import type { KiteInstance } from "./client";
+import type { Trade } from "../types";
 
 function col(text: string, width: number): string {
   return String(text).padEnd(width);
@@ -99,6 +100,70 @@ export async function displayOrders(kite: KiteInstance): Promise<void> {
         col(String(o.quantity), C) +
         statusColored
     );
+  }
+
+  console.log(SEP);
+  console.log();
+}
+
+export function displayHistory(trades: Trade[]): void {
+  if (trades.length === 0) {
+    console.log("📭 No trades found.");
+    return;
+  }
+
+  const C = 12;
+  const SEP = "─".repeat(C * 6 + 12);
+  console.log(`\n📋 Last ${trades.length} trade${trades.length > 1 ? "s" : ""}:\n`);
+  console.log(
+    ["#", "Action", "Symbol", "Qty", "Price", "Status", "Time"]
+      .map((h) => h.padEnd(C))
+      .join("")
+  );
+  console.log(SEP);
+
+  for (let i = 0; i < trades.length; i++) {
+    const t = trades[i]!;
+    const actionColored = (t.action === "BUY" ? green : red)(String(t.action).padEnd(C));
+    console.log(
+      String(i + 1).padEnd(C) +
+        actionColored +
+        String(t.symbol).padEnd(C) +
+        String(t.quantity).padEnd(C) +
+        (t.price ? `₹${Number(t.price).toFixed(2)}` : "N/A").padEnd(C) +
+        String(t.status).padEnd(C) +
+        new Date(String(t.executed_at)).toLocaleString("en-IN")
+    );
+  }
+  console.log();
+}
+
+export async function displayFunds(kite: KiteInstance): Promise<void> {
+  const margins = await kite.getMargins();
+  const eq = margins.equity;
+
+  if (!eq) {
+    console.log("❌ Could not fetch equity margin data.");
+    return;
+  }
+
+  const C = 22;
+  const SEP = "─".repeat(C * 2);
+  console.log("\n💰 Funds & Margins (Equity):\n");
+  console.log(SEP);
+
+  const rows: [string, number][] = [
+    ["Net Available", eq.net],
+    ["Cash Balance", eq.available.cash],
+    ["Opening Balance", eq.available.opening_balance],
+    ["Intraday Payin", eq.available.intraday_payin],
+    ["Collateral", eq.available.collateral],
+    ["Utilised (Debits)", eq.utilised.debits],
+  ];
+
+  for (const [label, value] of rows) {
+    const formatted = `₹${Math.abs(value).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+    console.log(label.padEnd(C) + (value < 0 ? red(formatted) : formatted));
   }
 
   console.log(SEP);

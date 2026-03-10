@@ -5,7 +5,7 @@ import { runKiteLogin } from "../kite/auth";
 import { getValidAccessToken } from "../db/tokens";
 import { placeOrder } from "../kite/orders";
 import { getTradeHistory } from "../db/trades";
-import { displayPositions, displayOrders } from "../kite/portfolio";
+import { displayPositions, displayOrders, displayHistory, displayFunds } from "../kite/portfolio";
 import type { UserId } from "../types";
 
 const VALID_USERS: UserId[] = ["lawless", "splinter"];
@@ -29,6 +29,7 @@ function printHelp(): void {
   positions               Open positions with P&L
   orders                  Today's order book
   history                 Show your last 20 trades
+  funds                   Show available cash & margin
   help                    Show this help
   exit                    Exit the bot
 `);
@@ -106,7 +107,8 @@ export async function startCLI(): Promise<void> {
 
   rl.prompt();
 
-  rl.on("line", async (line) => {
+  rl.on("line", (line) => {
+    (async () => {
     const parts = line.trim().split(/\s+/);
     const cmd = parts[0]?.toLowerCase();
 
@@ -233,34 +235,16 @@ export async function startCLI(): Promise<void> {
         break;
       }
 
+      case "funds": {
+        console.log(`⏳ Fetching funds & margins...`);
+        await displayFunds(kite);
+        break;
+      }
+
       case "history": {
         console.log(`⏳ Fetching trade history for ${userName}...`);
         const trades = await getTradeHistory(userId);
-        if (trades.length === 0) {
-          console.log("📭 No trades found.");
-        } else {
-          console.log(`\n📋 Last ${trades.length} trades for ${userName}:\n`);
-          console.log(
-            ["#", "Action", "Symbol", "Qty", "Price", "Status", "Time"]
-              .map((h) => h.padEnd(12))
-              .join("")
-          );
-          console.log("─".repeat(84));
-          trades.forEach((t, i) => {
-            console.log(
-              [
-                String(i + 1).padEnd(12),
-                String(t.action).padEnd(12),
-                String(t.symbol).padEnd(12),
-                String(t.quantity).padEnd(12),
-                t.price ? `₹${Number(t.price).toFixed(2)}`.padEnd(12) : "N/A".padEnd(12),
-                String(t.status).padEnd(12),
-                new Date(String(t.executed_at)).toLocaleString("en-IN"),
-              ].join("")
-            );
-          });
-          console.log();
-        }
+        displayHistory(trades);
         break;
       }
 
@@ -283,6 +267,10 @@ export async function startCLI(): Promise<void> {
     }
 
     rl.prompt();
+    })().catch((err) => {
+      console.error("\n❌ Unexpected error:", err instanceof Error ? err.message : String(err));
+      rl.prompt();
+    });
   });
 
   rl.on("close", () => process.exit(0));
