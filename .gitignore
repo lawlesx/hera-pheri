@@ -18,6 +18,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # local SQLite database
 *.db
 
+# exports
+exports/
+
 # dotenv environment variable files
 .env
 .env.development.local
