@@ -1,5 +1,7 @@
 import type { KiteInstance } from "./client";
 import { getQuote } from "./client";
+import { logGTT } from "../db/gtt";
+import type { UserId } from "../types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -38,7 +40,8 @@ export async function placeSingleGTT(
   symbol: string,
   quantity: number,
   trigger: number,
-  price: number
+  price: number,
+  userId: UserId
 ): Promise<GTTResult> {
   const last_price = (await getQuote(kite, symbol)) ?? price;
 
@@ -63,6 +66,21 @@ export async function placeSingleGTT(
     });
 
     const id = String(result.trigger_id);
+
+    await logGTT({
+      user_id: userId,
+      trigger_id: id,
+      gtt_type: "single",
+      symbol: symbol.toUpperCase(),
+      quantity,
+      sl_trigger: action === "SELL" ? trigger : null,
+      sl_price: action === "SELL" ? price : null,
+      target_trigger: action === "BUY" ? trigger : null,
+      target_price: action === "BUY" ? price : null,
+      action,
+      placed_at: new Date().toISOString(),
+    });
+
     return {
       trigger_id: id,
       status: "success",
@@ -86,7 +104,8 @@ export async function placeOCOGTT(
   slTrigger: number,
   slPrice: number,
   targetTrigger: number,
-  targetPrice: number
+  targetPrice: number,
+  userId: UserId
 ): Promise<GTTResult> {
   const last_price = (await getQuote(kite, symbol)) ?? slTrigger;
 
@@ -118,6 +137,21 @@ export async function placeOCOGTT(
     });
 
     const id = String(result.trigger_id);
+
+    await logGTT({
+      user_id: userId,
+      trigger_id: id,
+      gtt_type: "two-leg",
+      symbol: symbol.toUpperCase(),
+      quantity,
+      sl_trigger: slTrigger,
+      sl_price: slPrice,
+      target_trigger: targetTrigger,
+      target_price: targetPrice,
+      action: null,
+      placed_at: new Date().toISOString(),
+    });
+
     return {
       trigger_id: id,
       status: "success",

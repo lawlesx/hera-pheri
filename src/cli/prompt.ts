@@ -394,8 +394,8 @@ export async function startCLI(): Promise<void> {
             break;
           }
 
-          console.log(`⏳ Placing OCO GTT for ${symbol.toUpperCase()}...`);
-          const r = await placeOCOGTT(kite, symbol, qty, slTrig, slPx, tgtTrig, tgtPx);
+          console.log("⏳ Placing OCO GTT for "+symbol.toUpperCase()+"...");
+          const r = await placeOCOGTT(kite, symbol, qty, slTrig, slPx, tgtTrig, tgtPx, userId);
           console.log(r.status === "success" ? `✅ ${r.message}` : `❌ ${r.message}`);
           break;
         }
@@ -413,8 +413,8 @@ export async function startCLI(): Promise<void> {
           }
 
           const action = sub.toUpperCase() as "BUY" | "SELL";
-          console.log(`⏳ Placing single GTT ${action} ${qty} × ${symbol.toUpperCase()} trigger ₹${trigger}...`);
-          const r = await placeSingleGTT(kite, action, symbol, qty, trigger, price);
+          console.log("⏳ Placing single GTT "+action+" "+qty+" × "+symbol.toUpperCase()+" trigger ₹"+trigger+"...");
+          const r = await placeSingleGTT(kite, action, symbol, qty, trigger, price, userId);
           console.log(r.status === "success" ? `✅ ${r.message}` : `❌ ${r.message}`);
           break;
         }

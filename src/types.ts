@@ -15,6 +15,7 @@ export interface Trade {
   quantity: number;
   price: number | null;
   order_id: string | null;
+  order_type: "MARKET" | "LIMIT" | "SL" | "SL-M";
   status: string;
   executed_at: string;
 }

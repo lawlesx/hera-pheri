@@ -51,6 +51,7 @@ export async function placeOrder(
       quantity,
       price: executedPrice,
       order_id: String(orderId),
+      order_type,
       status: "PLACED",
       executed_at: new Date().toISOString(),
     });

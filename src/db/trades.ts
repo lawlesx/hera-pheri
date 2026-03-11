@@ -3,8 +3,8 @@ import type { Trade } from "../types";
 
 export async function logTrade(trade: Omit<Trade, "id">): Promise<void> {
   await db.execute({
-    sql: `INSERT INTO trades (user_id, action, symbol, quantity, price, order_id, status, executed_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO trades (user_id, action, symbol, quantity, price, order_id, order_type, status, executed_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     args: [
       trade.user_id,
       trade.action,
@@ -12,6 +12,7 @@ export async function logTrade(trade: Omit<Trade, "id">): Promise<void> {
       trade.quantity,
       trade.price ?? null,
       trade.order_id ?? null,
+      trade.order_type,
       trade.status,
       trade.executed_at,
     ],
