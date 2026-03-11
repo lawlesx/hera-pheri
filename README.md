@@ -8,7 +8,7 @@ NSE Intraday trading bot for two users, each with their own Zerodha account. Bui
 | ---------------- | ----------------------------------------------------------------- |
 | Runtime          | Bun.js + TypeScript                                               |
 | Broker API       | Kite Connect (Zerodha)                                            |
-| Market Data      | [TwelveData](https://twelvedata.com) (historical OHLCV)           |
+| Market Data      | Yahoo Finance (historical OHLCV — no API key required)            |
 | Indicators       | [technicalindicators](https://github.com/anandanand84/technicalindicators) |
 | Database         | SQLite — local file or hosted via [Turso](https://turso.tech/)    |
 | Deployment       | Local or Railway                                                  |
@@ -53,9 +53,7 @@ LAWLESS_KITE_API_SECRET=...
 SPLINTER_KITE_API_KEY=...
 SPLINTER_KITE_API_SECRET=...
 
-# TwelveData API key — required for fetch/backtest/paper commands
-# Free tier: 800 API calls/day — get yours at https://twelvedata.com
-TWELVEDATA_API_KEY=...
+# Historical data via Yahoo Finance — no API key needed
 ```
 
 ### 3. Kite Connect Setup
@@ -273,7 +271,7 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 ```
 # 1. Download 1 year of daily candles for RELIANCE
 [Lawless] > fetch RELIANCE 1day 365
-⏳ Fetching RELIANCE 1day candles (last 365 days) from TwelveData...
+⏳ Fetching RELIANCE 1day candles (last 365 days) from Yahoo Finance...
 ✅ Stored 248 candles for RELIANCE (1day)
 
 # 2. Run a backtest
@@ -336,7 +334,7 @@ hera-pheri/
 │   │   ├── auth.ts       # OAuth login — local server + browser open
 │   │   ├── orders.ts     # placeOrder() (MARKET/LIMIT/SL/SL-M) + placeExitOrders()
 │   │   ├── gtt.ts        # GTT: placeSingleGTT(), placeOCOGTT(), deleteGTT(), displayGTTs()
-│   │   ├── historical.ts # TwelveData OHLCV fetch + DB upsert
+│   │   ├── historical.ts # Yahoo Finance OHLCV fetch + DB upsert (no API key needed)
 │   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds(), displayUsage()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
