@@ -118,8 +118,7 @@ orders                                     Today's order book with colour-coded 
 history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
 help                                       Show command reference
-ref                                        Glossary — order types, GTT params, MIS/CNC explained
-exit                                       Exit the bot
+ref                                        Glossary — order types, GTT params, MIS/CNC explained  usage                                      Order counts (today/week/month/all-time) + estimated brokerageexit                                       Exit the bot
 ```
 
 > ⚠️ Regular `buy`/`sell` orders use **MIS (Margin Intraday Square-off)** — auto-closed by Zerodha at 3:25 PM IST.
@@ -201,6 +200,36 @@ Shows all open MIS positions with avg entry, last traded price, unrealised and r
 
 Shows up to 50 of today's orders: time, symbol, BUY/SELL type, quantity, and status (COMPLETE / OPEN / REJECTED highlighted in colour).
 
+### Usage & Brokerage Estimate (`usage`)
+
+Shows how many orders you've placed across different time windows, a breakdown by order type, and an estimated brokerage cost:
+
+```
+[Lawless] > usage
+⏳ Fetching usage stats for Lawless...
+
+📊 Usage — Lawless
+
+Today           This Week       This Month      All Time
+────────────────────────────────────────────────────────────────
+3 orders        12 orders       47 orders       214 orders
+────────────────────────────────────────────────────────────────
+
+📋 By Order Type:
+
+  MARKET     28
+  LIMIT      11
+  SL-M       8
+
+💸 Estimated Brokerage (₹20 flat/order, MIS):
+
+  Today      ₹60.00
+  This Week  ₹240.00
+  This Month ₹940.00
+```
+
+> Zerodha charges min(₹20, 0.03% of turnover) per executed MIS order. GTT/CNC orders are ₹0 brokerage and are not counted here.
+
 ---
 
 ## Local vs Cloud (Railway)
@@ -230,12 +259,12 @@ hera-pheri/
 │   │   ├── auth.ts       # OAuth login — local server + browser open
 │   │   ├── orders.ts     # placeOrder() (MARKET/LIMIT/SL/SL-M) + placeExitOrders()
 │   │   ├── gtt.ts        # GTT: placeSingleGTT(), placeOCOGTT(), deleteGTT(), displayGTTs()
-│   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds()
+│   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds(), displayUsage()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
 │   │   ├── migrate.ts    # Schema + user seed
 │   │   ├── tokens.ts     # Save/validate daily access tokens
-│   │   ├── trades.ts     # Log & fetch trade history
+│   │   ├── trades.ts     # Log & fetch trade history + getUsageStats()
 │   │   └── gtt.ts        # logGTT() — local audit log for GTT placements
 │   └── cli/
 │       └── prompt.ts     # Interactive CLI loop with auth flow

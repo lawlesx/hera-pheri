@@ -1,5 +1,6 @@
 import type { KiteInstance } from "./client";
 import type { Trade } from "../types";
+import type { UsageStats } from "../db/trades";
 
 function col(text: string, width: number): string {
   return String(text).padEnd(width);
@@ -167,5 +168,39 @@ export async function displayFunds(kite: KiteInstance): Promise<void> {
   }
 
   console.log(SEP);
+  console.log();
+}
+
+export function displayUsage(userName: string, stats: UsageStats): void {
+  const C = 16;
+  const SEP = "─".repeat(C * 4);
+
+  console.log(`\n📊 Usage — ${userName}\n`);
+  console.log(SEP);
+  console.log(
+    ["Today", "This Week", "This Month", "All Time"].map((h) => h.padEnd(C)).join("")
+  );
+  console.log(SEP);
+  console.log(
+    [stats.today, stats.week, stats.month, stats.allTime]
+      .map((n) => `${n} order${n !== 1 ? "s" : ""}`.padEnd(C))
+      .join("")
+  );
+  console.log(SEP);
+
+  // Breakdown by order type
+  if (Object.keys(stats.byOrderType).length > 0) {
+    console.log("\n📋 By Order Type:\n");
+    for (const [type, count] of Object.entries(stats.byOrderType)) {
+      console.log(`  ${type.padEnd(10)} ${count}`);
+    }
+  }
+
+  // Estimated brokerage (₹20 flat per MIS order — Zerodha intraday)
+  console.log("\n💸 Estimated Brokerage (₹20 flat/order, MIS):\n");
+  const brok = stats.estimatedBrokerage;
+  console.log(`  Today      ₹${brok.today.toFixed(2)}`);
+  console.log(`  This Week  ₹${brok.week.toFixed(2)}`);
+  console.log(`  This Month ₹${brok.month.toFixed(2)}`);
   console.log();
 }

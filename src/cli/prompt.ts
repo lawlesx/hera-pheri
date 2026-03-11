@@ -6,8 +6,8 @@ import { getValidAccessToken } from "../db/tokens";
 import { placeOrder, placeExitOrders } from "../kite/orders";
 import type { PlaceOrderOptions } from "../kite/orders";
 import { placeSingleGTT, placeOCOGTT, deleteGTT, displayGTTs } from "../kite/gtt";
-import { getTradeHistory } from "../db/trades";
-import { displayPositions, displayOrders, displayHistory, displayFunds } from "../kite/portfolio";
+import { getTradeHistory, getUsageStats } from "../db/trades";
+import { displayPositions, displayOrders, displayHistory, displayFunds, displayUsage } from "../kite/portfolio";
 import type { UserId } from "../types";
 
 const VALID_USERS: UserId[] = ["lawless", "splinter"];
@@ -43,6 +43,7 @@ function printHelp(): void {
   orders                  Today's order book
   history                 Show your last 20 trades
   funds                   Show available cash & margin
+  usage                   Show order usage & estimated brokerage
   help                    Show this help
   ref                     Quick reference — order types, GTT params, glossary
   exit                    Exit the bot
@@ -476,6 +477,13 @@ export async function startCLI(): Promise<void> {
       case "ref":
         printRef();
         break;
+
+      case "usage": {
+        console.log(`⏳ Fetching usage stats for ${userName}...`);
+        const stats = await getUsageStats(userId);
+        displayUsage(userName, stats);
+        break;
+      }
 
       case "exit":
       case "quit":
