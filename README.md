@@ -118,6 +118,7 @@ orders                                     Today's order book with colour-coded 
 history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
 help                                       Show command reference
+ref                                        Glossary — order types, GTT params, MIS/CNC explained
 exit                                       Exit the bot
 ```
 
@@ -234,7 +235,8 @@ hera-pheri/
 │   │   ├── client.ts     # SQLite/Turso connection
 │   │   ├── migrate.ts    # Schema + user seed
 │   │   ├── tokens.ts     # Save/validate daily access tokens
-│   │   └── trades.ts     # Log & fetch trade history
+│   │   ├── trades.ts     # Log & fetch trade history
+│   │   └── gtt.ts        # logGTT() — local audit log for GTT placements
 │   └── cli/
 │       └── prompt.ts     # Interactive CLI loop with auth flow
 ├── .github/

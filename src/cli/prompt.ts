@@ -44,6 +44,7 @@ function printHelp(): void {
   history                 Show your last 20 trades
   funds                   Show available cash & margin
   help                    Show this help
+  ref                     Quick reference — order types, GTT params, glossary
   exit                    Exit the bot
 
 📌 Examples:
@@ -55,6 +56,49 @@ function printHelp(): void {
   gtt  oco RELIANCE 10 2400 2390 2700 2710
   gtt  delete 123456
   gtts
+`);
+}
+
+function printRef(): void {
+  console.log(`
+📚 Quick Reference
+
+─── Order Types ─────────────────────────────────
+  MARKET   Execute immediately at current market price. No price control.
+  LIMIT    Execute only at your specified price or better. May not fill
+           immediately if price isn’t reached.
+  SL       Stop-Loss Limit. Waits for TRIGGER, then places a LIMIT at PRICE.
+           You control both levels.
+  SL-M     Stop-Loss Market. Waits for TRIGGER, then fires a MARKET order.
+           Guaranteed fill, but no price control.
+
+─── Products ──────────────────────────────────
+  MIS      Margin Intraday Square-off. Zerodha auto-closes all open MIS
+           positions at 3:20 PM IST. Used by buy/sell commands.
+  CNC      Cash and Carry (delivery). Holds overnight/long term.
+           Used by all GTT orders.
+
+─── GTT – Good Till Triggered ──────────────────────
+  Lives on Kite’s servers. Fires when price condition is met — survives
+  across sessions, days, or weeks until triggered or deleted.
+
+  single   One trigger → one order. Use for: buy a dip, set a target, set SL.
+  OCO      Two triggers on the same holding. When one fires, Kite auto-cancels
+           the other (One Cancels Other).
+
+  GTT parameters:
+    TRIGGER    Price level that activates the order.
+    PRICE      Limit price of the order placed once triggered.
+    SL_TRIG    Stoploss trigger — BELOW current price.
+    SL_PX      Limit price for the SL SELL leg.
+    TGT_TRIG   Target trigger   — ABOVE current price.
+    TGT_PX     Limit price for the target SELL leg.
+
+─── Intraday Target & Stoploss ──────────────────────
+  After any buy/sell, bot prompts for optional Target and Stoploss.
+  Target   → opposite-side LIMIT exit order (e.g. SELL above entry).
+  Stoploss → opposite-side SL-M exit order  (e.g. SELL below entry).
+  Both are regular DAY orders (MIS) — expire at market close.
 `);
 }
 
@@ -427,6 +471,10 @@ export async function startCLI(): Promise<void> {
 
       case "help":
         printHelp();
+        break;
+
+      case "ref":
+        printRef();
         break;
 
       case "exit":

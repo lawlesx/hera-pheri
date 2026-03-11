@@ -28,6 +28,18 @@ export interface GTTResult {
   message: string;
 }
 
+// KiteConnect's TS types don't include GTT methods — extend once here.
+interface KiteWithGTT {
+  placeGTT(params: PlaceGTTParams): Promise<{ trigger_id: number }>;
+  modifyGTT(trigger_id: number, params: PlaceGTTParams): Promise<{ trigger_id: number }>;
+  deleteGTT(trigger_id: number): Promise<unknown>;
+  getGTTs(): Promise<GTTEntry[]>;
+}
+
+function gtt(kite: KiteInstance): KiteWithGTT {
+  return kite as unknown as KiteWithGTT;
+}
+
 // ── Place ──────────────────────────────────────────────────────────────────
 
 /**
@@ -46,9 +58,7 @@ export async function placeSingleGTT(
   const last_price = (await getQuote(kite, symbol)) ?? price;
 
   try {
-    const result = await (kite as unknown as {
-      placeGTT(p: PlaceGTTParams): Promise<{ trigger_id: number }>;
-    }).placeGTT({
+    const result = await gtt(kite).placeGTT({
       trigger_type: "single",
       tradingsymbol: symbol.toUpperCase(),
       exchange: "NSE",
@@ -110,9 +120,7 @@ export async function placeOCOGTT(
   const last_price = (await getQuote(kite, symbol)) ?? slTrigger;
 
   try {
-    const result = await (kite as unknown as {
-      placeGTT(p: PlaceGTTParams): Promise<{ trigger_id: number }>;
-    }).placeGTT({
+    const result = await gtt(kite).placeGTT({
       trigger_type: "two-leg",
       tradingsymbol: symbol.toUpperCase(),
       exchange: "NSE",
@@ -168,9 +176,7 @@ export async function placeOCOGTT(
 
 export async function deleteGTT(kite: KiteInstance, triggerId: string): Promise<GTTResult> {
   try {
-    await (kite as unknown as {
-      deleteGTT(id: number): Promise<unknown>;
-    }).deleteGTT(parseInt(triggerId));
+    await gtt(kite).deleteGTT(parseInt(triggerId));
     return {
       trigger_id: triggerId,
       status: "success",
@@ -198,7 +204,7 @@ function col(text: string, width: number): string {
 }
 
 export async function displayGTTs(kite: KiteInstance): Promise<void> {
-  const gtts = await (kite as unknown as { getGTTs(): Promise<GTTEntry[]> }).getGTTs();
+  const gtts = await gtt(kite).getGTTs();
 
   const active = gtts.filter(
     (g) => g.status === "active" || g.status === "triggered"
