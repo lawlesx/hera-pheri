@@ -52,6 +52,35 @@ export async function runMigrations(): Promise<void> {
     )
   `);
 
+  // Candles table — historical OHLCV bars fetched from TwelveData
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS candles (
+      symbol   TEXT NOT NULL,
+      interval TEXT NOT NULL,
+      ts       TEXT NOT NULL,   -- ISO datetime string
+      open     REAL NOT NULL,
+      high     REAL NOT NULL,
+      low      REAL NOT NULL,
+      close    REAL NOT NULL,
+      volume   INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (symbol, interval, ts)
+    )
+  `);
+
+  // Paper trades — simulated fills from strategy signals
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS paper_trades (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      strategy      TEXT NOT NULL,
+      symbol        TEXT NOT NULL,
+      action        TEXT NOT NULL CHECK(action IN ('BUY', 'SELL')),
+      quantity      INTEGER NOT NULL,
+      price         REAL NOT NULL,
+      signal_reason TEXT NOT NULL DEFAULT '',
+      simulated_at  DATETIME NOT NULL
+    )
+  `);
+
   // Seed user rows (no secrets — just the ID placeholder)
   await db.execute(`INSERT OR IGNORE INTO users (id) VALUES ('lawless')`);
   await db.execute(`INSERT OR IGNORE INTO users (id) VALUES ('splinter')`);

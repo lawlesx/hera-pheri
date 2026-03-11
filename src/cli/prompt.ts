@@ -8,7 +8,13 @@ import type { PlaceOrderOptions } from "../kite/orders";
 import { placeSingleGTT, placeOCOGTT, deleteGTT, displayGTTs } from "../kite/gtt";
 import { getTradeHistory, getUsageStats } from "../db/trades";
 import { displayPositions, displayOrders, displayHistory, displayFunds, displayUsage } from "../kite/portfolio";
-import type { UserId } from "../types";
+import { fetchAndStoreCandles } from "../kite/historical";
+import { getCandles } from "../db/candles";
+import { runBacktest } from "../backtest/engine";
+import { printBacktestSummary, exportBacktestJSON } from "../backtest/reporter";
+import { startPaperTrading } from "../paper/trader";
+import { STRATEGIES } from "../strategies/registry";
+import type { UserId, CandleInterval } from "../types";
 
 const VALID_USERS: UserId[] = ["lawless", "splinter"];
 
@@ -44,6 +50,16 @@ function printHelp(): void {
   history                 Show your last 20 trades
   funds                   Show available cash & margin
   usage                   Show order usage & estimated brokerage
+
+📐 Algorithmic / Backtesting:
+  fetch <SYMBOL> [interval=1day] [days=365]
+                          Download OHLCV candles from TwelveData into DB
+  backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
+                          Run backtest and export results to ./exports/
+  paper <STRATEGY> <SYMBOL> [qty=1]
+                          Live paper trading loop (press Enter to stop)
+  strategies              List available strategies
+
   help                    Show this help
   ref                     Quick reference — order types, GTT params, glossary
   exit                    Exit the bot
@@ -57,6 +73,10 @@ function printHelp(): void {
   gtt  oco RELIANCE 10 2400 2390 2700 2710
   gtt  delete 123456
   gtts
+  fetch RELIANCE 1day 365
+  backtest ema_cross RELIANCE 1day 365 100000
+  paper rsi RELIANCE 10
+  strategies
 `);
 }
 
@@ -316,7 +336,7 @@ export async function startCLI(): Promise<void> {
       }
 
       case "watch": {
-        const symbols = parts.slice(1).map((s) => s.toUpperCase());
+        const symbols = parts.slice(1).map((s: string) => s.toUpperCase());
         if (symbols.length === 0) {
           console.log("❌ Usage: watch <SYMBOL> [SYMBOL2...]   e.g. watch RELIANCE TCS");
           break;
@@ -332,7 +352,7 @@ export async function startCLI(): Promise<void> {
         const renderWatch = async () => {
           if (!isWatching) return;
           try {
-            const quotes = await kite.getQuote(symbols.map((s) => `NSE:${s}`));
+            const quotes = await kite.getQuote(symbols.map((s: string) => `NSE:${s}`));
             if (!isWatching) return;
             const lines: string[] = [];
             lines.push(SEP);
@@ -482,6 +502,116 @@ export async function startCLI(): Promise<void> {
         console.log(`⏳ Fetching usage stats for ${userName}...`);
         const stats = await getUsageStats(userId);
         displayUsage(userName, stats);
+        break;
+      }
+
+      case "fetch": {
+        const sym = parts[1];
+        if (!sym) {
+          console.log("❌ Usage: fetch <SYMBOL> [interval=1day] [days=365]");
+          break;
+        }
+        const interval = (parts[2] ?? "1day") as CandleInterval;
+        const days = parseInt(parts[3] ?? "365", 10);
+        const validIntervals: CandleInterval[] = ["1min", "5min", "15min", "1h", "1day"];
+        if (!validIntervals.includes(interval)) {
+          console.log(`❌ Invalid interval '${interval}'. Choose from: ${validIntervals.join(", ")}`);
+          break;
+        }
+        if (isNaN(days) || days <= 0) {
+          console.log("❌ days must be a positive number");
+          break;
+        }
+        console.log(`⏳ Fetching ${sym.toUpperCase()} ${interval} candles (last ${days} days) from TwelveData...`);
+        try {
+          const count = await fetchAndStoreCandles(sym, interval, days);
+          if (count === 0) {
+            console.log(`⚠️  No candles returned. Check symbol name and TWELVEDATA_API_KEY.`);
+          } else {
+            console.log(`✅ Stored ${count} candles for ${sym.toUpperCase()} (${interval})`);
+          }
+        } catch (err) {
+          console.log(`❌ ${err instanceof Error ? err.message : String(err)}`);
+        }
+        break;
+      }
+
+      case "backtest": {
+        const stratName = parts[1]?.toLowerCase();
+        const sym = parts[2];
+        if (!stratName || !sym) {
+          console.log("❌ Usage: backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]");
+          console.log("   Run 'strategies' to see available strategy names.");
+          break;
+        }
+        const strategy = STRATEGIES[stratName];
+        if (!strategy) {
+          console.log(`❌ Unknown strategy '${stratName}'. Run 'strategies' to see available options.`);
+          break;
+        }
+        const interval = (parts[3] ?? "1day") as CandleInterval;
+        const days = parseInt(parts[4] ?? "365", 10);
+        const capital = parseFloat(parts[5] ?? "100000");
+
+        const candles = await getCandles(sym, interval);
+        if (candles.length < strategy.minBars) {
+          console.log(
+            `❌ Not enough data — need at least ${strategy.minBars} bars, have ${candles.length}.\n` +
+            `   Run: fetch ${sym.toUpperCase()} ${interval} ${Math.max(days, strategy.minBars * 2)}`
+          );
+          break;
+        }
+
+        // Limit to the requested days window if we have more data
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const filtered = candles.filter((c) => new Date(c.ts) >= cutoff);
+        const workingCandles = filtered.length >= strategy.minBars ? filtered : candles.slice(-Math.max(days, strategy.minBars));
+
+        console.log(`⏳ Running backtest: ${strategy.name} on ${sym.toUpperCase()} (${workingCandles.length} bars, capital ₹${capital.toLocaleString("en-IN")})...`);
+        try {
+          const result = runBacktest(strategy, workingCandles, { initialCapital: capital });
+          printBacktestSummary(result);
+          const file = await exportBacktestJSON(result);
+          console.log(`📁 Full results exported to: ${file}`);
+        } catch (err) {
+          console.log(`❌ Backtest failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        break;
+      }
+
+      case "paper": {
+        const stratName = parts[1]?.toLowerCase();
+        const sym = parts[2];
+        if (!stratName || !sym) {
+          console.log("❌ Usage: paper <STRATEGY> <SYMBOL> [qty=1]");
+          break;
+        }
+        const strategy = STRATEGIES[stratName];
+        if (!strategy) {
+          console.log(`❌ Unknown strategy '${stratName}'. Run 'strategies' to see available options.`);
+          break;
+        }
+        const qty = parseInt(parts[3] ?? "1", 10);
+        if (isNaN(qty) || qty <= 0) {
+          console.log("❌ qty must be a positive integer");
+          break;
+        }
+        rl.pause();
+        await startPaperTrading(kite, strategy, sym, qty);
+        rl.resume();
+        break;
+      }
+
+      case "strategies": {
+        const C = 14;
+        console.log(`\n📐 Available Strategies:\n`);
+        console.log(`${"Name".padEnd(C)} Min Bars  Description`);
+        console.log("─".repeat(72));
+        for (const [name, s] of Object.entries(STRATEGIES)) {
+          console.log(`${name.padEnd(C)} ${String(s.minBars).padEnd(10)}${s.description}`);
+        }
+        console.log();
         break;
       }
 

@@ -4,12 +4,14 @@ NSE Intraday trading bot for two users, each with their own Zerodha account. Bui
 
 ## Stack
 
-| Layer      | Tech                                                           |
-| ---------- | -------------------------------------------------------------- |
-| Runtime    | Bun.js + TypeScript                                            |
-| Broker API | Kite Connect (Zerodha)                                         |
-| Database   | SQLite — local file or hosted via [Turso](https://turso.tech/) |
-| Deployment | Local or Railway                                               |
+| Layer            | Tech                                                              |
+| ---------------- | ----------------------------------------------------------------- |
+| Runtime          | Bun.js + TypeScript                                               |
+| Broker API       | Kite Connect (Zerodha)                                            |
+| Market Data      | [TwelveData](https://twelvedata.com) (historical OHLCV)           |
+| Indicators       | [technicalindicators](https://github.com/anandanand84/technicalindicators) |
+| Database         | SQLite — local file or hosted via [Turso](https://turso.tech/)    |
+| Deployment       | Local or Railway                                                  |
 
 ---
 
@@ -50,6 +52,10 @@ LAWLESS_KITE_API_SECRET=...
 
 SPLINTER_KITE_API_KEY=...
 SPLINTER_KITE_API_SECRET=...
+
+# TwelveData API key — required for fetch/backtest/paper commands
+# Free tier: 800 API calls/day — get yours at https://twelvedata.com
+TWELVEDATA_API_KEY=...
 ```
 
 ### 3. Kite Connect Setup
@@ -117,8 +123,15 @@ positions                                  Open positions with unrealised / real
 orders                                     Today's order book with colour-coded status
 history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
+usage                                      Order counts (today/week/month/all-time) + estimated brokerage
+fetch <SYMBOL> [interval=1day] [days=365]  Download OHLCV candles from TwelveData into DB
+backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
+                                           Run a backtest and export results to ./exports/
+paper <STRATEGY> <SYMBOL> [qty=1]          Live paper-trading loop on a strategy (press Enter to stop)
+strategies                                 List all available strategies with descriptions
 help                                       Show command reference
-ref                                        Glossary — order types, GTT params, MIS/CNC explained  usage                                      Order counts (today/week/month/all-time) + estimated brokerageexit                                       Exit the bot
+ref                                        Glossary — order types, GTT params, MIS/CNC explained
+exit                                       Exit the bot
 ```
 
 > ⚠️ Regular `buy`/`sell` orders use **MIS (Margin Intraday Square-off)** — auto-closed by Zerodha at 3:25 PM IST.
@@ -232,6 +245,70 @@ Today           This Week       This Month      All Time
 
 ---
 
+## Backtesting & Algorithmic Strategies
+
+The bot includes a full backtesting pipeline and paper-trading loop on top of the live trading foundation.
+
+### Workflow
+
+```
+1. fetch    — Download OHLCV candles from TwelveData into the local DB
+2. backtest — Replay candles through a strategy, compute metrics, export JSON
+3. paper    — Run the strategy live on Kite quotes without placing real orders
+```
+
+### Available Strategies
+
+| Name        | Logic                                                             |
+| ----------- | ----------------------------------------------------------------- |
+| `ema_cross` | EMA(9)/EMA(21) golden/death cross                                 |
+| `rsi`       | RSI(14) oversold reversal (<30 → BUY) / overbought reversal (>70 → SELL) |
+| `macd`      | MACD(12,26,9) signal line crossover                               |
+| `bollinger` | Bollinger Bands(20,2) lower/upper band mean-reversion             |
+| `donchian`  | Donchian Channel(20) N-bar high/low breakout                      |
+| `vwap`      | Rolling VWAP(20) crossover (close crosses above/below VWAP)       |
+
+### Example Usage
+
+```
+# 1. Download 1 year of daily candles for RELIANCE
+[Lawless] > fetch RELIANCE 1day 365
+⏳ Fetching RELIANCE 1day candles (last 365 days) from TwelveData...
+✅ Stored 248 candles for RELIANCE (1day)
+
+# 2. Run a backtest
+[Lawless] > backtest ema_cross RELIANCE 1day 365 100000
+⏳ Running backtest: ema_cross on RELIANCE (248 bars, capital ₹1,00,000)...
+
+📊 Backtest Results — EMA_CROSS on RELIANCE (1day)
+   Period: 2025-03-11 → 2026-03-11
+────────────────────────────────────────────────────────
+  Initial Capital      ₹1,00,000
+  Final Capital        ₹1,18,340
+  Total Return         +18.34%
+  CAGR                 +18.34%
+  Sharpe Ratio         0.872
+  Max Drawdown         -9.12%
+  Win Rate             62.5%
+  Total Trades         8
+────────────────────────────────────────────────────────
+📁 Full results exported to: ./exports/backtest_ema_cross_RELIANCE_2026-03-11.json
+
+# 3. Paper trade live
+[Lawless] > paper rsi RELIANCE 10
+📡 Paper Trading — RSI on RELIANCE × 10
+   (Press Enter to stop)
+```
+
+### Backtest Design Notes
+
+- **No look-ahead bias** — signals are generated on bar close; fills happen at the next bar's open price
+- **Commission** — flat ₹20 per order leg (matches the `usage` command estimate)
+- **Position sizing** — 100% of available capital by default; configurable via `positionSizePct` in the engine
+- **Exported JSON** includes full trade log, equity curve, and all metrics for further analysis
+
+---
+
 ## Local vs Cloud (Railway)
 
 |              | Local                                    | Railway                             |
@@ -253,19 +330,38 @@ hera-pheri/
 ├── index.ts              # Entrypoint — runs migrations, starts CLI
 ├── src/
 │   ├── env.ts            # Env loader
-│   ├── types.ts          # Shared types
+│   ├── types.ts          # Shared types (Trade, Candle, Signal, BacktestResult, …)
 │   ├── kite/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
 │   │   ├── orders.ts     # placeOrder() (MARKET/LIMIT/SL/SL-M) + placeExitOrders()
 │   │   ├── gtt.ts        # GTT: placeSingleGTT(), placeOCOGTT(), deleteGTT(), displayGTTs()
+│   │   ├── historical.ts # TwelveData OHLCV fetch + DB upsert
 │   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds(), displayUsage()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
-│   │   ├── migrate.ts    # Schema + user seed
+│   │   ├── migrate.ts    # Schema + user seed (users, trades, gtt_orders, candles, paper_trades)
 │   │   ├── tokens.ts     # Save/validate daily access tokens
 │   │   ├── trades.ts     # Log & fetch trade history + getUsageStats()
-│   │   └── gtt.ts        # logGTT() — local audit log for GTT placements
+│   │   ├── gtt.ts        # logGTT() — local audit log for GTT placements
+│   │   └── candles.ts    # upsertCandles(), getCandles(), logPaperTrade()
+│   ├── indicators/
+│   │   └── index.ts      # calcEMA, calcSMA, calcRSI, calcMACD, calcBollingerBands, calcDonchian, calcVWAP
+│   ├── strategies/
+│   │   ├── base.ts       # Strategy interface
+│   │   ├── registry.ts   # STRATEGIES map — all strategies by name
+│   │   ├── ema_cross.ts  # EMA(9)/EMA(21) golden/death cross
+│   │   ├── rsi.ts        # RSI(14) oversold/overbought reversal
+│   │   ├── macd.ts       # MACD(12,26,9) signal line crossover
+│   │   ├── bollinger.ts  # Bollinger Bands(20,2) mean-reversion
+│   │   ├── donchian.ts   # Donchian Channel(20) breakout
+│   │   └── vwap.ts       # Rolling VWAP(20) crossover
+│   ├── backtest/
+│   │   ├── engine.ts     # runBacktest() — bar-by-bar simulation, fills at next-bar-open
+│   │   ├── metrics.ts    # calcSharpe, calcCAGR, calcMaxDrawdown, calcWinRate
+│   │   └── reporter.ts   # CLI summary table + JSON export to ./exports/
+│   ├── paper/
+│   │   └── trader.ts     # Live paper-trading loop — polls Kite quotes, logs to DB
 │   └── cli/
 │       └── prompt.ts     # Interactive CLI loop with auth flow
 ├── .github/
