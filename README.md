@@ -107,6 +107,10 @@ sell <SYMBOL> <QTY>                        Market SELL (e.g. sell TCS 5)
 sell <SYMBOL> <QTY> limit <PRICE>          Limit SELL  (e.g. sell INFY 5 limit 1400)
 sell <SYMBOL> <QTY> sl <TRIGGER>           SL-M SELL   (e.g. sell TCS 3 sl 3800)
 sell <SYMBOL> <QTY> sl <TRIGGER> <PRICE>   SL SELL     (e.g. sell TCS 3 sl 3800 3795)
+gtt  <buy|sell> <SYMBOL> <QTY> <TRIGGER> <PRICE>                Single-leg GTT
+gtt  oco <SYMBOL> <QTY> <SL_TRIG> <SL_PX> <TGT_TRIG> <TGT_PX> OCO GTT (two-leg)
+gtts                                       List all active GTT orders
+gtt  delete <ID>                           Delete a GTT by ID
 watch <S1> [S2...]                         Live price feed — refreshes every 2s (press Enter to stop)
 quote <SYMBOL>                             Get the current price of a stock
 positions                                  Open positions with unrealised / realised P&L
@@ -117,7 +121,8 @@ help                                       Show command reference
 exit                                       Exit the bot
 ```
 
-> ⚠️ All orders use **MIS (Margin Intraday Square-off)**. Open positions are auto-closed by Zerodha at 3:25 PM IST.
+> ⚠️ Regular `buy`/`sell` orders use **MIS (Margin Intraday Square-off)** — auto-closed by Zerodha at 3:25 PM IST.
+> GTT orders use **CNC (Delivery)** and persist across sessions until triggered or deleted.
 
 ### Target & Stoploss on Entry
 
@@ -138,6 +143,35 @@ After any successful entry order (`buy` / `sell`), the bot interactively asks fo
 - **Target** → opposite-side LIMIT order at your specified price
 - **Stoploss** → opposite-side SL-M order at your trigger price
 - Press Enter to skip either leg
+
+### GTT — Good Till Triggered (`gtt`)
+
+GTT orders persist until the price hits the trigger, or you delete them. They survive across sessions and work with CNC (delivery) holdings.
+
+**Single-leg** — fires one order when price crosses the trigger:
+
+```
+[Lawless] > gtt buy RELIANCE 10 2400 2395
+⏳ Placing single GTT BUY 10 × RELIANCE trigger ₹2400...
+✅ GTT BUY 10 RELIANCE — trigger ₹2400, limit ₹2395 (ID: 123456)
+```
+
+**OCO (One Cancels Other)** — two SELL legs on a long holding; once one triggers, Kite cancels the other:
+
+```
+[Lawless] > gtt oco RELIANCE 10 2400 2390 2700 2710
+⏳ Placing OCO GTT for RELIANCE...
+✅ GTT OCO 10 RELIANCE — SL ₹2400→₹2390 | Target ₹2700→₹2710 (ID: 123457)
+```
+
+SL trigger must be **below** current price; target trigger **above**.
+
+**List / Delete:**
+
+```
+[Lawless] > gtts
+[Lawless] > gtt delete 123456
+```
 
 ### Live Price Feed (`watch`)
 
@@ -194,6 +228,7 @@ hera-pheri/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
 │   │   ├── orders.ts     # placeOrder() (MARKET/LIMIT/SL/SL-M) + placeExitOrders()
+│   │   ├── gtt.ts        # GTT: placeSingleGTT(), placeOCOGTT(), deleteGTT(), displayGTTs()
 │   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection

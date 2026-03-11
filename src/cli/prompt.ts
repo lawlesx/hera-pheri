@@ -5,6 +5,7 @@ import { runKiteLogin } from "../kite/auth";
 import { getValidAccessToken } from "../db/tokens";
 import { placeOrder, placeExitOrders } from "../kite/orders";
 import type { PlaceOrderOptions } from "../kite/orders";
+import { placeSingleGTT, placeOCOGTT, deleteGTT, displayGTTs } from "../kite/gtt";
 import { getTradeHistory } from "../db/trades";
 import { displayPositions, displayOrders, displayHistory, displayFunds } from "../kite/portfolio";
 import type { UserId } from "../types";
@@ -31,6 +32,11 @@ function printHelp(): void {
   After any entry order you will be prompted for an optional
   Target price (LIMIT exit) and Stoploss price (SL-M exit).
 
+  gtt  <buy|sell> <SYMBOL> <QTY> <TRIGGER> <PRICE>        Single-leg GTT (CNC)
+  gtt  oco <SYMBOL> <QTY> <SL_TRIG> <SL_PX> <TGT_TRIG> <TGT_PX>   OCO GTT
+  gtts                                                    List active GTT orders
+  gtt  delete <ID>                                        Delete a GTT by ID
+
   watch <S1> [S2...]      Live price feed (press Enter to stop)
   quote <SYMBOL>          Get current price of a stock
   positions               Open positions with P&L
@@ -45,6 +51,10 @@ function printHelp(): void {
   buy  RELIANCE 10 limit 2500
   sell INFY 5 sl 1400
   sell TCS 3 sl 3800 3795
+  gtt  buy RELIANCE 10 2400 2395
+  gtt  oco RELIANCE 10 2400 2390 2700 2710
+  gtt  delete 123456
+  gtts
 `);
 }
 
@@ -344,6 +354,74 @@ export async function startCLI(): Promise<void> {
         console.log(`⏳ Fetching trade history for ${userName}...`);
         const trades = await getTradeHistory(userId);
         displayHistory(trades);
+        break;
+      }
+
+      case "gtts": {
+        console.log("⏳ Fetching GTT orders...");
+        await displayGTTs(kite);
+        break;
+      }
+
+      case "gtt": {
+        const sub = parts[1]?.toLowerCase();
+
+        // gtt delete <ID>
+        if (sub === "delete") {
+          const id = parts[2];
+          if (!id) {
+            console.log("❌ Usage: gtt delete <ID>");
+            break;
+          }
+          console.log(`⏳ Deleting GTT ${id}...`);
+          const r = await deleteGTT(kite, id);
+          console.log(r.status === "success" ? `✅ ${r.message}` : `❌ ${r.message}`);
+          break;
+        }
+
+        // gtt oco <SYMBOL> <QTY> <SL_TRIG> <SL_PX> <TGT_TRIG> <TGT_PX>
+        if (sub === "oco") {
+          const symbol   = parts[2];
+          const qty      = parseInt(parts[3] ?? "", 10);
+          const slTrig   = parseFloat(parts[4] ?? "");
+          const slPx     = parseFloat(parts[5] ?? "");
+          const tgtTrig  = parseFloat(parts[6] ?? "");
+          const tgtPx    = parseFloat(parts[7] ?? "");
+
+          if (!symbol || isNaN(qty) || qty <= 0 || isNaN(slTrig) || isNaN(slPx) || isNaN(tgtTrig) || isNaN(tgtPx)) {
+            console.log("❌ Usage: gtt oco <SYMBOL> <QTY> <SL_TRIGGER> <SL_PRICE> <TARGET_TRIGGER> <TARGET_PRICE>");
+            console.log("ⓘ  SL trigger must be below current price; target trigger above.");
+            break;
+          }
+
+          console.log(`⏳ Placing OCO GTT for ${symbol.toUpperCase()}...`);
+          const r = await placeOCOGTT(kite, symbol, qty, slTrig, slPx, tgtTrig, tgtPx);
+          console.log(r.status === "success" ? `✅ ${r.message}` : `❌ ${r.message}`);
+          break;
+        }
+
+        // gtt <buy|sell> <SYMBOL> <QTY> <TRIGGER> <PRICE>
+        if (sub === "buy" || sub === "sell") {
+          const symbol  = parts[2];
+          const qty     = parseInt(parts[3] ?? "", 10);
+          const trigger = parseFloat(parts[4] ?? "");
+          const price   = parseFloat(parts[5] ?? "");
+
+          if (!symbol || isNaN(qty) || qty <= 0 || isNaN(trigger) || isNaN(price)) {
+            console.log(`❌ Usage: gtt ${sub} <SYMBOL> <QTY> <TRIGGER> <PRICE>`);
+            break;
+          }
+
+          const action = sub.toUpperCase() as "BUY" | "SELL";
+          console.log(`⏳ Placing single GTT ${action} ${qty} × ${symbol.toUpperCase()} trigger ₹${trigger}...`);
+          const r = await placeSingleGTT(kite, action, symbol, qty, trigger, price);
+          console.log(r.status === "success" ? `✅ ${r.message}` : `❌ ${r.message}`);
+          break;
+        }
+
+        console.log("❌ Usage: gtt <buy|sell> <SYMBOL> <QTY> <TRIGGER> <PRICE>");
+        console.log("       gtt oco <SYMBOL> <QTY> <SL_TRIG> <SL_PX> <TGT_TRIG> <TGT_PX>");
+        console.log("       gtt delete <ID>");
         break;
       }
 
