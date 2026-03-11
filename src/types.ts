@@ -43,6 +43,7 @@ export interface Signal {
   action: "BUY" | "SELL";
   reason: string;
   price: number;   // signal bar's close price
+  indicators?: Record<string, number>;  // indicator values at signal bar (for LLM explanation)
 }
 
 export interface BacktestTrade {

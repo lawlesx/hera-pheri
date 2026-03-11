@@ -25,12 +25,12 @@ export const rsiStrategy: Strategy = {
 
     // BUY: RSI crosses above oversold threshold (reversal from oversold)
     if (rsiPrev <= OVERSOLD && rsiCur > OVERSOLD) {
-      return { action: "BUY", reason: `RSI(${PERIOD}) crossed above ${OVERSOLD} (oversold reversal: ${rsiCur.toFixed(1)})`, price: cur.close };
+      return { action: "BUY", reason: `RSI(${PERIOD}) crossed above ${OVERSOLD} (oversold reversal: ${rsiCur.toFixed(1)})`, price: cur.close, indicators: { rsi: rsiCur } };
     }
 
     // SELL: RSI crosses below overbought threshold (reversal from overbought)
     if (rsiPrev >= OVERBOUGHT && rsiCur < OVERBOUGHT) {
-      return { action: "SELL", reason: `RSI(${PERIOD}) crossed below ${OVERBOUGHT} (overbought reversal: ${rsiCur.toFixed(1)})`, price: cur.close };
+      return { action: "SELL", reason: `RSI(${PERIOD}) crossed below ${OVERBOUGHT} (overbought reversal: ${rsiCur.toFixed(1)})`, price: cur.close, indicators: { rsi: rsiCur } };
     }
 
     return null;

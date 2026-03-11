@@ -27,6 +27,7 @@ export const vwapStrategy: Strategy = {
         action: "BUY",
         reason: `Close crossed above VWAP (close: ${bar.close.toFixed(2)}, VWAP: ${vwapCur.toFixed(2)})`,
         price: bar.close,
+        indicators: { vwap: vwapCur },
       };
     }
 
@@ -36,6 +37,7 @@ export const vwapStrategy: Strategy = {
         action: "SELL",
         reason: `Close crossed below VWAP (close: ${bar.close.toFixed(2)}, VWAP: ${vwapCur.toFixed(2)})`,
         price: bar.close,
+        indicators: { vwap: vwapCur },
       };
     }
 

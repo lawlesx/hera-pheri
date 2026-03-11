@@ -29,6 +29,7 @@ export const bollingerStrategy: Strategy = {
         action: "BUY",
         reason: `Close reverted above lower BB (close: ${bar.close.toFixed(2)}, lower: ${curBB.lower.toFixed(2)})`,
         price: bar.close,
+        indicators: { bb_upper: curBB.upper, bb_middle: curBB.middle, bb_lower: curBB.lower },
       };
     }
 
@@ -38,6 +39,7 @@ export const bollingerStrategy: Strategy = {
         action: "SELL",
         reason: `Close touched upper BB (close: ${bar.close.toFixed(2)}, upper: ${curBB.upper.toFixed(2)})`,
         price: bar.close,
+        indicators: { bb_upper: curBB.upper, bb_middle: curBB.middle, bb_lower: curBB.lower },
       };
     }
 

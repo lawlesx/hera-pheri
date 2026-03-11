@@ -14,6 +14,7 @@ import { runBacktest } from "../backtest/engine";
 import { printBacktestSummary, exportBacktestJSON } from "../backtest/reporter";
 import { startPaperTrading } from "../paper/trader";
 import { STRATEGIES } from "../strategies/registry";
+import { analyzeBacktest, recommendStrategies, getRiskAdvice } from "../llm/analyst";
 import type { UserId, CandleInterval } from "../types";
 
 const VALID_USERS: UserId[] = ["lawless", "splinter"];
@@ -56,6 +57,8 @@ function printHelp(): void {
                           Download OHLCV candles from TwelveData into DB
   backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
                           Run backtest and export results to ./exports/
+  recommend <SYMBOL> [interval=1day] [days=365]
+                          Run all strategies on a symbol and get AI recommendation
   paper <STRATEGY> <SYMBOL> [qty=1]
                           Live paper trading loop (press Enter to stop)
   strategies              List available strategies
@@ -312,6 +315,19 @@ export async function startCLI(): Promise<void> {
                 }
               }
             }
+          }
+
+          console.log("\n⏳ Asking AI for risk assessment...");
+          const riskAdvice = await getRiskAdvice(
+            symbol.toUpperCase(),
+            action,
+            qty,
+            orderOptions.price ?? null
+          );
+          if (riskAdvice) {
+            console.log("\n🤖 Risk Assessment:\n");
+            console.log(riskAdvice);
+            console.log();
           }
         } else {
           console.log(`❌ ${result.message}`);
@@ -574,8 +590,133 @@ export async function startCLI(): Promise<void> {
           printBacktestSummary(result);
           const file = await exportBacktestJSON(result);
           console.log(`📁 Full results exported to: ${file}`);
+          console.log("\n⏳ Asking AI for analysis...");
+          const analysis = await analyzeBacktest(result);
+          if (analysis) {
+            console.log("\n🤖 AI Analysis:\n");
+            console.log(analysis);
+            console.log();
+          }
         } catch (err) {
           console.log(`❌ Backtest failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+        break;
+      }
+
+      case "recommend": {
+        const sym = parts[1];
+        if (!sym) {
+          console.log("\u274c Usage: recommend <SYMBOL> [interval=1day] [days=365]");
+          break;
+        }
+        const interval = (parts[2] ?? "1day") as CandleInterval;
+        const days = parseInt(parts[3] ?? "365", 10);
+
+        const candles = await getCandles(sym, interval);
+        if (candles.length === 0) {
+          console.log(`\u274c No candles for ${sym.toUpperCase()} — run: fetch ${sym.toUpperCase()} ${interval} ${days}`);
+          break;
+        }
+
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const filtered = candles.filter((c) => new Date(c.ts) >= cutoff);
+
+        console.log(`\u23f3 Running all strategies on ${sym.toUpperCase()} (${interval}, last ${days} days)...`);
+        const results = [];
+        for (const strategy of Object.values(STRATEGIES)) {
+          const working = filtered.length >= strategy.minBars ? filtered : candles.slice(-strategy.minBars * 2);
+          if (working.length < strategy.minBars) continue;
+          try {
+            results.push(runBacktest(strategy, working, { initialCapital: 100000 }));
+          } catch { /* not enough data for this strategy */ }
+        }
+
+        if (results.length === 0) {
+          console.log("\u274c Not enough data to run any strategy.");
+          break;
+        }
+
+        const C = 14;
+        console.log(`\n\ud83d\udcca Strategy Performance on ${sym.toUpperCase()} (${interval}, last ${days} days)\n`);
+        console.log(["Strategy", "Return", "CAGR", "Sharpe", "MaxDD", "WinRate"].map((h) => h.padEnd(C)).join(""));
+        console.log("─".repeat(C * 6));
+        for (const r of results.sort((a, b) => b.sharpe - a.sharpe)) {
+          console.log(
+            r.strategy.padEnd(C) +
+            `${r.totalReturn >= 0 ? "+" : ""}${r.totalReturn.toFixed(1)}%`.padEnd(C) +
+            `${r.cagr >= 0 ? "+" : ""}${r.cagr.toFixed(1)}%`.padEnd(C) +
+            r.sharpe.toFixed(2).padEnd(C) +
+            `-${r.maxDrawdown.toFixed(1)}%`.padEnd(C) +
+            `${r.winRate.toFixed(0)}%`
+          );
+        }
+        console.log();
+        console.log("\u23f3 Asking AI for recommendations...");
+        const rec = await recommendStrategies(sym.toUpperCase(), results);
+        if (rec) {
+          console.log("\n\ud83e\udd16 AI Recommendation:\n");
+          console.log(rec);
+          console.log();
+        }
+        break;
+      }
+
+      case "recommend": {
+        const sym = parts[1];
+        if (!sym) {
+          console.log("❌ Usage: recommend <SYMBOL> [interval=1day] [days=365]");
+          break;
+        }
+        const interval = (parts[2] ?? "1day") as CandleInterval;
+        const days = parseInt(parts[3] ?? "365", 10);
+
+        const candles = await getCandles(sym, interval);
+        if (candles.length === 0) {
+          console.log(`❌ No candles for ${sym.toUpperCase()} — run: fetch ${sym.toUpperCase()} ${interval} ${days}`);
+          break;
+        }
+
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        const filtered = candles.filter((c) => new Date(c.ts) >= cutoff);
+
+        console.log(`⏳ Running all strategies on ${sym.toUpperCase()} (${interval}, last ${days} days)...`);
+        const recResults = [];
+        for (const strategy of Object.values(STRATEGIES)) {
+          const working = filtered.length >= strategy.minBars ? filtered : candles.slice(-strategy.minBars * 2);
+          if (working.length < strategy.minBars) continue;
+          try {
+            recResults.push(runBacktest(strategy, working, { initialCapital: 100000 }));
+          } catch { /* not enough data for this strategy */ }
+        }
+
+        if (recResults.length === 0) {
+          console.log("❌ Not enough data to run any strategy.");
+          break;
+        }
+
+        const RC = 14;
+        console.log(`\n📊 Strategy Performance on ${sym.toUpperCase()} (${interval}, last ${days} days)\n`);
+        console.log(["Strategy", "Return", "CAGR", "Sharpe", "MaxDD", "WinRate"].map((h) => h.padEnd(RC)).join(""));
+        console.log("─".repeat(RC * 6));
+        for (const r of recResults.sort((a, b) => b.sharpe - a.sharpe)) {
+          console.log(
+            r.strategy.padEnd(RC) +
+            `${r.totalReturn >= 0 ? "+" : ""}${r.totalReturn.toFixed(1)}%`.padEnd(RC) +
+            `${r.cagr >= 0 ? "+" : ""}${r.cagr.toFixed(1)}%`.padEnd(RC) +
+            r.sharpe.toFixed(2).padEnd(RC) +
+            `-${r.maxDrawdown.toFixed(1)}%`.padEnd(RC) +
+            `${r.winRate.toFixed(0)}%`
+          );
+        }
+        console.log();
+        console.log("⏳ Asking AI for recommendations...");
+        const rec = await recommendStrategies(sym.toUpperCase(), recResults);
+        if (rec) {
+          console.log("\n🤖 AI Recommendation:\n");
+          console.log(rec);
+          console.log();
         }
         break;
       }

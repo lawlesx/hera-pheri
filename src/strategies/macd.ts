@@ -29,6 +29,7 @@ export const macdStrategy: Strategy = {
         action: "BUY",
         reason: `MACD crossed above signal line (MACD: ${cur.macd.toFixed(2)}, Signal: ${cur.signal.toFixed(2)})`,
         price: bar.close,
+        indicators: { macd: cur.macd, macd_signal: cur.signal, macd_histogram: cur.macd - cur.signal },
       };
     }
 
@@ -38,6 +39,7 @@ export const macdStrategy: Strategy = {
         action: "SELL",
         reason: `MACD crossed below signal line (MACD: ${cur.macd.toFixed(2)}, Signal: ${cur.signal.toFixed(2)})`,
         price: bar.close,
+        indicators: { macd: cur.macd, macd_signal: cur.signal, macd_histogram: cur.macd - cur.signal },
       };
     }
 

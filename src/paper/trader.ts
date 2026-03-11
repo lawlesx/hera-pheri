@@ -4,6 +4,7 @@ import type { Strategy } from "../strategies/base";
 import type { Candle } from "../types";
 import { getCandles } from "../db/candles";
 import { logPaperTrade } from "../db/candles";
+import { explainSignal } from "../llm/analyst";
 
 const POLL_INTERVAL_MS = 5_000; // 5-second polling interval
 
@@ -92,6 +93,8 @@ export async function startPaperTrading(
             );
             console.log(green(`[${time}] 📈 PAPER BUY  ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}`));
             console.log(`         Reason: ${signal.reason}`);
+            const buyExplanation = await explainSignal(signal, syntheticCandle);
+            if (buyExplanation) console.log(`\n🤖 ${buyExplanation}\n`);
           } else if (signal.action === "SELL" && position !== null) {
             const pnl = (q.last_price - position.price) * qty;
             await logPaperTrade(
@@ -99,6 +102,8 @@ export async function startPaperTrading(
             );
             console.log(yellow(`[${time}] 📉 PAPER SELL ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}  P&L: ₹${pnl.toFixed(2)}`));
             console.log(`         Reason: ${signal.reason}`);
+            const sellExplanation = await explainSignal(signal, syntheticCandle);
+            if (sellExplanation) console.log(`\n🤖 ${sellExplanation}\n`);
             position = null;
           }
         } else {

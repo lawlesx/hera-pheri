@@ -11,6 +11,7 @@ NSE Intraday trading bot for two users, each with their own Zerodha account. Bui
 | Market Data      | Yahoo Finance (historical OHLCV — no API key required)            |
 | Indicators       | [technicalindicators](https://github.com/anandanand84/technicalindicators) |
 | Database         | SQLite — local file or hosted via [Turso](https://turso.tech/)    |
+| LLM              | [Ollama](https://ollama.com) — local inference, no cloud required |
 | Deployment       | Local or Railway                                                  |
 
 ---
@@ -54,7 +55,13 @@ SPLINTER_KITE_API_KEY=...
 SPLINTER_KITE_API_SECRET=...
 
 # Historical data via Yahoo Finance — no API key needed
+
+# Ollama — local LLM for AI analysis (optional, gracefully skipped if offline)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=granite4:3b
 ```
+
+> To enable AI features, install [Ollama](https://ollama.com) and run `ollama pull granite4:3b`. If Ollama is not running, all AI features are silently skipped — the bot works normally.
 
 ### 3. Kite Connect Setup
 
@@ -122,9 +129,11 @@ orders                                     Today's order book with colour-coded 
 history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
 usage                                      Order counts (today/week/month/all-time) + estimated brokerage
-fetch <SYMBOL> [interval=1day] [days=365]  Download OHLCV candles from TwelveData into DB
+fetch <SYMBOL> [interval=1day] [days=365]  Download OHLCV candles from Yahoo Finance into DB
 backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
-                                           Run a backtest and export results to ./exports/
+                                           Run a backtest, export results, and get AI analysis
+recommend <SYMBOL> [interval=1day] [days=365]
+                                           Run all strategies on a symbol and get AI strategy recommendation
 paper <STRATEGY> <SYMBOL> [qty=1]          Live paper-trading loop on a strategy (press Enter to stop)
 strategies                                 List all available strategies with descriptions
 help                                       Show command reference
@@ -250,9 +259,10 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 ### Workflow
 
 ```
-1. fetch    — Download OHLCV candles from TwelveData into the local DB
-2. backtest — Replay candles through a strategy, compute metrics, export JSON
-3. paper    — Run the strategy live on Kite quotes without placing real orders
+1. fetch     — Download OHLCV candles from Yahoo Finance into the local DB
+2. backtest  — Replay candles through a strategy, compute metrics, export JSON + get AI analysis
+3. recommend — Run all strategies on a symbol and get an AI-powered recommendation
+4. paper     — Run the strategy live on Kite quotes without placing real orders (AI explains each signal)
 ```
 
 ### Available Strategies
@@ -292,10 +302,38 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 ────────────────────────────────────────────────────────
 📁 Full results exported to: ./exports/backtest_ema_cross_RELIANCE_2026-03-11.json
 
-# 3. Paper trade live
+⏳ Asking AI for analysis...
+
+🤖 AI Analysis:
+
+The EMA cross strategy made a solid +18.34% return on RELIANCE — that means your ₹1 lakh grew to ₹1.18 lakh over the year. With 8 trades and a 62.5% win rate, more than half of the trades were profitable, which is a good sign for a trend-following approach.
+
+# 3. Get AI strategy recommendation
+[Lawless] > recommend RELIANCE 1day 365
+⏳ Running all strategies on RELIANCE (1day, last 365 days)...
+
+📊 Strategy Performance on RELIANCE (1day, last 365 days)
+
+Strategy      Return        CAGR          Sharpe        MaxDD         WinRate
+──────────────────────────────────────────────────────────────────────────────────
+ema_cross     +18.3%        +18.3%        0.87          -9.1%         62%
+...
+
+⏳ Asking AI for recommendations...
+
+🤖 AI Recommendation:
+
+✅ Best: ema_cross — the highest Sharpe ratio means the best risk-adjusted return...
+
+# 4. Paper trade live
 [Lawless] > paper rsi RELIANCE 10
 📡 Paper Trading — RSI on RELIANCE × 10
    (Press Enter to stop)
+
+[14:23:45] 📈 PAPER BUY  RELIANCE × 10 @ ₹2500.50
+           Reason: RSI(14) crossed above 30 (oversold reversal: 31.4)
+
+🤖 The RSI just bounced off the oversold zone (below 30) and crossed back above it — this means selling pressure has exhausted and buyers are stepping in. The signal is moderately strong as RSI has room to run toward 70...
 ```
 
 ### Backtest Design Notes
@@ -304,6 +342,18 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 - **Commission** — flat ₹20 per order leg (matches the `usage` command estimate)
 - **Position sizing** — 100% of available capital by default; configurable via `positionSizePct` in the engine
 - **Exported JSON** includes full trade log, equity curve, and all metrics for further analysis
+- **AI analysis** — after every backtest, Ollama interprets the metrics and gives a plain-English verdict (requires Ollama running locally)
+
+### AI Features (Ollama)
+
+All AI output is automatic — no extra commands needed. If Ollama is offline, a `⚠️ Ollama unavailable` warning is shown and the bot continues normally.
+
+| Trigger | AI Output |
+| ------- | --------- |
+| After `backtest` | Interprets metrics, explains Sharpe/drawdown, gives YES/MAYBE/NO verdict |
+| After `buy` / `sell` | Assesses exposure, suggests stoploss and target levels |
+| After each signal in `paper` | Explains what the indicator did and what to watch next |
+| `recommend <SYMBOL>` | Ranks all strategies, labels each ✅/⚠️/❌, names the top pick |
 
 ---
 
@@ -328,7 +378,7 @@ hera-pheri/
 ├── index.ts              # Entrypoint — runs migrations, starts CLI
 ├── src/
 │   ├── env.ts            # Env loader
-│   ├── types.ts          # Shared types (Trade, Candle, Signal, BacktestResult, …)
+│   ├── types.ts          # Shared types (Trade, Candle, Signal w/ indicators, BacktestResult, …)
 │   ├── kite/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
@@ -359,9 +409,14 @@ hera-pheri/
 │   │   ├── metrics.ts    # calcSharpe, calcCAGR, calcMaxDrawdown, calcWinRate
 │   │   └── reporter.ts   # CLI summary table + JSON export to ./exports/
 │   ├── paper/
-│   │   └── trader.ts     # Live paper-trading loop — polls Kite quotes, logs to DB
+│   │   └── trader.ts     # Live paper-trading loop — polls Kite quotes, logs to DB, explains signals
+│   ├── llm/
+│   │   ├── client.ts     # callOllama() — wraps Ollama /api/generate REST endpoint
+│   │   ├── prompts.ts    # Prompt builders for each AI use case
+│   │   └── analyst.ts    # analyzeBacktest, explainSignal, recommendStrategies, getRiskAdvice
 │   └── cli/
-│       └── prompt.ts     # Interactive CLI loop with auth flow
+│       └── prompt.ts     # Interactive CLI loop with auth flow + recommend command
+├── exports/              # Backtest JSON exports (gitignored)
 ├── .github/
 │   └── prompts/
 │       └── update-readme.prompt.md  # Reusable prompt to keep README in sync

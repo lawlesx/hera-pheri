@@ -29,12 +29,12 @@ export const emaCrossStrategy: Strategy = {
 
     // Golden cross: fast crosses above slow
     if (fastPrev <= slowPrev && fastCur > slowCur) {
-      return { action: "BUY", reason: `EMA(${FAST}) crossed above EMA(${SLOW})`, price: cur.close };
+      return { action: "BUY", reason: `EMA(${FAST}) crossed above EMA(${SLOW})`, price: cur.close, indicators: { [`ema_${FAST}`]: fastCur, [`ema_${SLOW}`]: slowCur } };
     }
 
     // Death cross: fast crosses below slow
     if (fastPrev >= slowPrev && fastCur < slowCur) {
-      return { action: "SELL", reason: `EMA(${FAST}) crossed below EMA(${SLOW})`, price: cur.close };
+      return { action: "SELL", reason: `EMA(${FAST}) crossed below EMA(${SLOW})`, price: cur.close, indicators: { [`ema_${FAST}`]: fastCur, [`ema_${SLOW}`]: slowCur } };
     }
 
     return null;

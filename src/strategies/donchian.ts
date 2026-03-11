@@ -30,6 +30,7 @@ export const donchianStrategy: Strategy = {
         action: "BUY",
         reason: `Close broke ${PERIOD}-bar high (${bar.close.toFixed(2)} > ${prevDC.upper.toFixed(2)})`,
         price: bar.close,
+        indicators: { dc_upper: prevDC.upper, dc_lower: prevDC.lower },
       };
     }
 
@@ -39,6 +40,7 @@ export const donchianStrategy: Strategy = {
         action: "SELL",
         reason: `Close broke ${PERIOD}-bar low (${bar.close.toFixed(2)} < ${prevDC.lower.toFixed(2)})`,
         price: bar.close,
+        indicators: { dc_upper: prevDC.upper, dc_lower: prevDC.lower },
       };
     }
 
