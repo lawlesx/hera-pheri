@@ -3,7 +3,8 @@ import type { KiteInstance } from "../kite/client";
 import { createKiteClient, isMarketOpen, getQuote } from "../kite/client";
 import { runKiteLogin } from "../kite/auth";
 import { getValidAccessToken } from "../db/tokens";
-import { placeOrder } from "../kite/orders";
+import { placeOrder, placeExitOrders } from "../kite/orders";
+import type { PlaceOrderOptions } from "../kite/orders";
 import { getTradeHistory } from "../db/trades";
 import { displayPositions, displayOrders, displayHistory, displayFunds } from "../kite/portfolio";
 import type { UserId } from "../types";
@@ -14,7 +15,7 @@ function printBanner(): void {
   console.log(`
 ╔══════════════════════════════════════╗
 ║      🐍 HERA-PHERI TRADE BOT         ║
-║      NSE Intraday — MIS / Market     ║
+║    NSE Intraday — MIS / Limit / SL   ║
 ╚══════════════════════════════════════╝
 `);
 }
@@ -22,8 +23,14 @@ function printBanner(): void {
 function printHelp(): void {
   console.log(`
 📖 Commands:
-  buy <SYMBOL> <QTY>      Place a market BUY order
-  sell <SYMBOL> <QTY>     Place a market SELL order
+  buy  <SYMBOL> <QTY> [limit <PRICE>]           Market or Limit BUY
+  buy  <SYMBOL> <QTY> [sl <TRIGGER> [<PRICE>]]  SL-M or SL BUY
+  sell <SYMBOL> <QTY> [limit <PRICE>]           Market or Limit SELL
+  sell <SYMBOL> <QTY> [sl <TRIGGER> [<PRICE>]]  SL-M or SL SELL
+
+  After any entry order you will be prompted for an optional
+  Target price (LIMIT exit) and Stoploss price (SL-M exit).
+
   watch <S1> [S2...]      Live price feed (press Enter to stop)
   quote <SYMBOL>          Get current price of a stock
   positions               Open positions with P&L
@@ -32,7 +39,46 @@ function printHelp(): void {
   funds                   Show available cash & margin
   help                    Show this help
   exit                    Exit the bot
+
+📌 Examples:
+  buy  RELIANCE 10
+  buy  RELIANCE 10 limit 2500
+  sell INFY 5 sl 1400
+  sell TCS 3 sl 3800 3795
 `);
+}
+
+/**
+ * Parses order-type modifiers from extra CLI tokens after <SYMBOL> <QTY>.
+ * Returns null if the tokens are present but malformed.
+ *   []                  → MARKET (empty options)
+ *   ["limit", "2500"]   → LIMIT at ₹2500
+ *   ["sl", "2450"]      → SL-M at trigger ₹2450
+ *   ["sl", "2450", "2455"] → SL at trigger ₹2450, limit ₹2455
+ */
+function parseOrderOptions(extra: string[]): PlaceOrderOptions | null {
+  if (extra.length === 0) return {};
+
+  const keyword = extra[0]?.toLowerCase();
+
+  if (keyword === "limit" || keyword === "l") {
+    const price = parseFloat(extra[1] ?? "");
+    if (isNaN(price) || price <= 0) return null;
+    return { order_type: "LIMIT", price };
+  }
+
+  if (keyword === "sl") {
+    const trigger = parseFloat(extra[1] ?? "");
+    if (isNaN(trigger) || trigger <= 0) return null;
+    if (extra[2] !== undefined) {
+      const price = parseFloat(extra[2]);
+      if (isNaN(price) || price <= 0) return null;
+      return { order_type: "SL", price, trigger_price: trigger };
+    }
+    return { order_type: "SL-M", trigger_price: trigger };
+  }
+
+  return null;
 }
 
 async function askQuestion(prompt: string): Promise<string> {
@@ -129,16 +175,69 @@ export async function startCLI(): Promise<void> {
         const qty = parseInt(parts[2] ?? "", 10);
 
         if (!symbol || isNaN(qty) || qty <= 0) {
-          console.log(`❌ Usage: ${cmd} <SYMBOL> <QTY>   e.g. ${cmd} RELIANCE 10`);
+          console.log(`❌ Usage: ${cmd} <SYMBOL> <QTY> [limit <PRICE> | sl <TRIGGER> [<PRICE>]]`);
           break;
         }
 
-        console.log(`⏳ Placing ${cmd.toUpperCase()} — ${qty} × ${symbol.toUpperCase()}...`);
-        const result = await placeOrder(kite, cmd.toUpperCase() as "BUY" | "SELL", symbol, qty, userId);
+        // Parse optional order-type modifier: limit / sl
+        const orderOptions = parseOrderOptions(parts.slice(3));
+        if (orderOptions === null) {
+          console.log(`❌ Invalid order options. Use: limit <PRICE>  or  sl <TRIGGER> [<PRICE>]`);
+          break;
+        }
+
+        const action = cmd.toUpperCase() as "BUY" | "SELL";
+        const orderTypeLabel = orderOptions.order_type ?? "MARKET";
+        console.log(`⏳ Placing ${action} — ${qty} × ${symbol.toUpperCase()} [${orderTypeLabel}]...`);
+        const result = await placeOrder(kite, action, symbol, qty, userId, orderOptions);
 
         if (result.status === "success") {
           console.log(`✅ ${result.message}`);
           console.log(`   Order ID: ${result.order_id}`);
+
+          // Prompt for optional target / stoploss exit orders
+          const ask = (prompt: string): Promise<string> =>
+            new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
+
+          const targetStr = await ask("🎯 Target price? (Enter to skip): ");
+          const slStr = await ask("🛡  Stoploss price? (Enter to skip): ");
+
+          const target = targetStr !== "" ? parseFloat(targetStr) : undefined;
+          const stoploss = slStr !== "" ? parseFloat(slStr) : undefined;
+
+          const hasExit = target !== undefined || stoploss !== undefined;
+          if (hasExit) {
+            if (target !== undefined && isNaN(target)) {
+              console.log("⚠️  Invalid target price — skipped.");
+            }
+            if (stoploss !== undefined && isNaN(stoploss)) {
+              console.log("⚠️  Invalid stoploss price — skipped.");
+            }
+            const validTarget = target !== undefined && !isNaN(target) ? target : undefined;
+            const validSL = stoploss !== undefined && !isNaN(stoploss) ? stoploss : undefined;
+
+            if (validTarget !== undefined || validSL !== undefined) {
+              console.log("⏳ Placing exit orders...");
+              const exits = await placeExitOrders(kite, action, symbol, qty, userId, validTarget, validSL);
+
+              if (exits.targetResult) {
+                if (exits.targetResult.status === "success") {
+                  console.log(`✅ Target ${exits.targetResult.message}`);
+                  console.log(`   Order ID: ${exits.targetResult.order_id}`);
+                } else {
+                  console.log(`❌ Target order failed: ${exits.targetResult.message}`);
+                }
+              }
+              if (exits.slResult) {
+                if (exits.slResult.status === "success") {
+                  console.log(`✅ SL ${exits.slResult.message}`);
+                  console.log(`   Order ID: ${exits.slResult.order_id}`);
+                } else {
+                  console.log(`❌ SL order failed: ${exits.slResult.message}`);
+                }
+              }
+            }
+          }
         } else {
           console.log(`❌ ${result.message}`);
         }

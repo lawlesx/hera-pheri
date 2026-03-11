@@ -99,19 +99,45 @@ bun run start
 ## CLI Commands
 
 ```
-buy <SYMBOL> <QTY>          Place a market BUY order   (e.g. buy RELIANCE 10)
-sell <SYMBOL> <QTY>         Place a market SELL order  (e.g. sell TCS 5)
-watch <S1> [S2...]          Live price feed — refreshes every 2s (press Enter to stop)
-quote <SYMBOL>              Get the current price of a stock
-positions                   Open positions with unrealised / realised P&L
-orders                      Today's order book with colour-coded status
-history                     Show your last 20 trades
-  funds                       Show available cash & margin (equity segment)
-  help                        Show command reference
-exit                        Exit the bot
+buy  <SYMBOL> <QTY>                        Market BUY  (e.g. buy RELIANCE 10)
+buy  <SYMBOL> <QTY> limit <PRICE>          Limit BUY   (e.g. buy RELIANCE 10 limit 2500)
+buy  <SYMBOL> <QTY> sl <TRIGGER>           SL-M BUY    (e.g. buy RELIANCE 10 sl 2480)
+buy  <SYMBOL> <QTY> sl <TRIGGER> <PRICE>   SL BUY      (e.g. buy RELIANCE 10 sl 2480 2475)
+sell <SYMBOL> <QTY>                        Market SELL (e.g. sell TCS 5)
+sell <SYMBOL> <QTY> limit <PRICE>          Limit SELL  (e.g. sell INFY 5 limit 1400)
+sell <SYMBOL> <QTY> sl <TRIGGER>           SL-M SELL   (e.g. sell TCS 3 sl 3800)
+sell <SYMBOL> <QTY> sl <TRIGGER> <PRICE>   SL SELL     (e.g. sell TCS 3 sl 3800 3795)
+watch <S1> [S2...]                         Live price feed — refreshes every 2s (press Enter to stop)
+quote <SYMBOL>                             Get the current price of a stock
+positions                                  Open positions with unrealised / realised P&L
+orders                                     Today's order book with colour-coded status
+history                                    Show your last 20 trades
+funds                                      Show available cash & margin (equity segment)
+help                                       Show command reference
+exit                                       Exit the bot
 ```
 
 > ⚠️ All orders use **MIS (Margin Intraday Square-off)**. Open positions are auto-closed by Zerodha at 3:25 PM IST.
+
+### Target & Stoploss on Entry
+
+After any successful entry order (`buy` / `sell`), the bot interactively asks for optional exit orders:
+
+```
+✅ BUY 10 RELIANCE @ MARKET placed successfully
+   Order ID: 10000001
+🎯 Target price? (Enter to skip): 2580
+🛡  Stoploss price? (Enter to skip): 2460
+⏳ Placing exit orders...
+✅ Target SELL 10 RELIANCE @ LIMIT ₹2580 placed successfully
+   Order ID: 10000002
+✅ SL SELL 10 RELIANCE SL-M trigger ₹2460 placed successfully
+   Order ID: 10000003
+```
+
+- **Target** → opposite-side LIMIT order at your specified price
+- **Stoploss** → opposite-side SL-M order at your trigger price
+- Press Enter to skip either leg
 
 ### Live Price Feed (`watch`)
 
@@ -167,7 +193,7 @@ hera-pheri/
 │   ├── kite/
 │   │   ├── client.ts     # Per-user Kite client factory + market hours
 │   │   ├── auth.ts       # OAuth login — local server + browser open
-│   │   ├── orders.ts     # placeOrder() — MIS market orders
+│   │   ├── orders.ts     # placeOrder() (MARKET/LIMIT/SL/SL-M) + placeExitOrders()
 │   │   └── portfolio.ts  # displayPositions(), displayOrders(), displayHistory(), displayFunds()
 │   ├── db/
 │   │   ├── client.ts     # SQLite/Turso connection
