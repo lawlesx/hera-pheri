@@ -52,7 +52,7 @@ export async function runMigrations(): Promise<void> {
     )
   `);
 
-  // Candles table — historical OHLCV bars fetched from TwelveData
+  // Candles table — historical OHLCV bars fetched from Yahoo Finance
   await db.execute(`
     CREATE TABLE IF NOT EXISTS candles (
       symbol   TEXT NOT NULL,

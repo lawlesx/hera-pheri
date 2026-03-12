@@ -54,7 +54,7 @@ function printHelp(): void {
 
 📐 Algorithmic / Backtesting:
   fetch <SYMBOL> [interval=1day] [days=365]
-                          Download OHLCV candles from TwelveData into DB
+                          Download OHLCV candles from Yahoo Finance into DB
   backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
                           Run backtest and export results to ./exports/
   recommend <SYMBOL> [interval=1day] [days=365]
@@ -538,11 +538,11 @@ export async function startCLI(): Promise<void> {
           console.log("❌ days must be a positive number");
           break;
         }
-        console.log(`⏳ Fetching ${sym.toUpperCase()} ${interval} candles (last ${days} days) from TwelveData...`);
+        console.log(`⏳ Fetching ${sym.toUpperCase()} ${interval} candles (last ${days} days) from Yahoo Finance...`);
         try {
           const count = await fetchAndStoreCandles(sym, interval, days);
           if (count === 0) {
-            console.log(`⚠️  No candles returned. Check symbol name and TWELVEDATA_API_KEY.`);
+            console.log(`⚠️  No candles returned. Check the symbol name (use NSE format, e.g. RELIANCE.NS).`);
           } else {
             console.log(`✅ Stored ${count} candles for ${sym.toUpperCase()} (${interval})`);
           }
