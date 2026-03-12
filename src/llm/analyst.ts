@@ -7,8 +7,8 @@ import {
 } from "./prompts";
 import type { BacktestResult, Signal, Candle } from "../types";
 
-export async function analyzeBacktest(result: BacktestResult): Promise<string> {
-  return callOllama(buildBacktestPrompt(result));
+export async function analyzeBacktest(result: BacktestResult, candles?: Candle[]): Promise<string> {
+  return callOllama(buildBacktestPrompt(result, candles));
 }
 
 export async function explainSignal(signal: Signal, candle: Candle): Promise<string> {

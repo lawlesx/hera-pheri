@@ -1,10 +1,51 @@
 import type { BacktestResult, Signal, Candle } from "../types";
 
-export function buildBacktestPrompt(result: BacktestResult): string {
-  const last5 = result.trades.slice(-5).map((t) =>
-    `  ${t.action} entry ₹${t.entryPrice.toFixed(0)} → exit ₹${t.exitPrice?.toFixed(0) ?? "OPEN"}` +
-    `  P&L: ₹${t.pnl?.toFixed(0) ?? "OPEN"}  (${t.reason})`
+export function buildBacktestPrompt(result: BacktestResult, candles?: Candle[]): string {
+  // Full trade list (capped at 50 most recent to stay within context)
+  const tradeList = result.trades.slice(-50).map((t, i) =>
+    `  ${String(i + 1).padStart(3)}. ${t.action} ` +
+    `entry ${t.entryTs?.slice(0, 10) ?? "?"} ₹${t.entryPrice.toFixed(0)} → ` +
+    `exit ${t.exitTs?.slice(0, 10) ?? "OPEN"} ₹${t.exitPrice?.toFixed(0) ?? "OPEN"} ` +
+    `qty ${t.qty}  P&L: ₹${t.pnl?.toFixed(0) ?? "OPEN"}  (${t.reason})`
   ).join("\n");
+  const tradesNote = result.trades.length > 50
+    ? `  (showing last 50 of ${result.trades.length} trades)`
+    : `  (all ${result.trades.length} trades)`;
+
+  // Equity curve: peak and trough
+  let peakEquity = result.initialCapital;
+  let peakTs = result.from;
+  let troughEquity = result.initialCapital;
+  let troughTs = result.from;
+  for (const pt of result.equityCurve) {
+    if (pt.equity > peakEquity) { peakEquity = pt.equity; peakTs = pt.ts; }
+    if (pt.equity < troughEquity) { troughEquity = pt.equity; troughTs = pt.ts; }
+  }
+
+  // Candle context from DB
+  let candleSection = "";
+  if (candles && candles.length > 0) {
+    const firstCandle = candles[0]!;
+    const lastCandle = candles[candles.length - 1]!;
+    const closes = candles.map((c) => c.close);
+    const highs = candles.map((c) => c.high);
+    const lows = candles.map((c) => c.low);
+    const volumes = candles.map((c) => c.volume);
+    const minClose = Math.min(...closes);
+    const maxClose = Math.max(...closes);
+    const avgClose = closes.reduce((a, b) => a + b, 0) / closes.length;
+    const maxHigh = Math.max(...highs);
+    const minLow = Math.min(...lows);
+    const avgVol = Math.round(volumes.reduce((a, b) => a + b, 0) / volumes.length);
+    const last10 = candles.slice(-10).map((c) => `₹${c.close.toFixed(0)}`).join(", ");
+    candleSection = `
+OHLCV candle data (${candles.length} bars from DB — ${firstCandle.ts.slice(0, 10)} → ${lastCandle.ts.slice(0, 10)}):
+  Price range : low ₹${minLow.toFixed(0)} → high ₹${maxHigh.toFixed(0)}
+  Close range : ₹${minClose.toFixed(0)} → ₹${maxClose.toFixed(0)}  Avg close: ₹${avgClose.toFixed(0)}
+  Avg volume  : ${avgVol.toLocaleString("en-IN")}
+  Last 10 closes (most recent last): ${last10}
+`;
+  }
 
   return `You are a quantitative trading expert and friendly mentor for Indian NSE markets. You have deep technical knowledge but explain everything in simple, everyday language — like a seasoned analyst sitting next to a beginner and walking them through the numbers. No jargon without explanation. Be direct and tell them clearly what to do next.
 
@@ -21,8 +62,13 @@ Performance numbers:
   Win Rate        : ${result.winRate.toFixed(1)}%  (percentage of trades that made money)
   Total Trades    : ${result.totalTrades}
 
-Last 5 trades:
-${last5 || "  (none)"}
+Equity curve highlights:
+  Peak equity  : ₹${Math.round(peakEquity).toLocaleString("en-IN")} on ${peakTs.slice(0, 10)}
+  Trough equity: ₹${Math.round(troughEquity).toLocaleString("en-IN")} on ${troughTs.slice(0, 10)}
+  Final equity : ₹${Math.round(result.finalCapital).toLocaleString("en-IN")}
+${candleSection}
+Trade log ${tradesNote}:
+${tradeList || "  (none)"}
 
 Please respond in this structure:
 1. **What happened** — In 2 simple sentences, did this strategy make or lose money on ${result.symbol} and by how much?

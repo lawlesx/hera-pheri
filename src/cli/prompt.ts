@@ -591,7 +591,7 @@ export async function startCLI(): Promise<void> {
           const file = await exportBacktestJSON(result);
           console.log(`📁 Full results exported to: ${file}`);
           console.log("\n⏳ Asking AI for analysis...");
-          const analysis = await analyzeBacktest(result);
+          const analysis = await analyzeBacktest(result, workingCandles);
           if (analysis) {
             console.log("\n🤖 AI Analysis:\n");
             console.log(analysis);
