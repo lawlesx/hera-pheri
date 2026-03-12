@@ -10,6 +10,7 @@ interface OllamaResponse {
  * Returns an empty string (never throws) if Ollama is unreachable.
  */
 export async function callOllama(prompt: string): Promise<string> {
+  console.log(`\n💬  Prompting Ollama (${MODEL})...`);
   try {
     const res = await fetch(`${BASE_URL}/api/generate`, {
       method: "POST",
