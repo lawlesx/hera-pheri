@@ -50,6 +50,25 @@ export async function getCandleCount(
   return Number((result.rows[0] as unknown as { c: number }).c);
 }
 
+export async function flushCandles(symbol?: string, interval?: CandleInterval): Promise<number> {
+  let sql = `DELETE FROM candles`;
+  const args: string[] = [];
+
+  if (symbol && interval) {
+    sql += ` WHERE symbol = ? AND interval = ?`;
+    args.push(symbol.toUpperCase(), interval);
+  } else if (symbol) {
+    sql += ` WHERE symbol = ?`;
+    args.push(symbol.toUpperCase());
+  } else if (interval) {
+    sql += ` WHERE interval = ?`;
+    args.push(interval);
+  }
+
+  const result = await db.execute({ sql, args });
+  return Number(result.rowsAffected ?? 0);
+}
+
 export async function logPaperTrade(
   strategy: string,
   symbol: string,

@@ -130,6 +130,7 @@ history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
 usage                                      Order counts (today/week/month/all-time) + estimated brokerage
 fetch <SYMBOL> [interval=1day] [days=365]  Download OHLCV candles from Yahoo Finance into DB
+flush [SYMBOL] [interval]                  Delete candles from DB — all, per symbol, or per symbol+interval
 backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000] [mode=long|short]
                                            Run a backtest, export results, and get AI analysis
 recommend <SYMBOL> [interval=1day] [days=365]
@@ -262,9 +263,10 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 
 ```
 1. fetch     — Download OHLCV candles from Yahoo Finance into the local DB
-2. backtest  — Replay candles through a strategy, compute metrics, export JSON + get AI analysis
-3. recommend — Run all strategies on a symbol and get an AI-powered recommendation
-4. paper     — Run the strategy live on Kite quotes without placing real orders (AI explains each signal)
+2. flush     — Remove stale or unwanted candles (optional housekeeping)
+3. backtest  — Replay candles through a strategy, compute metrics, export JSON + get AI analysis
+4. recommend — Run all strategies on a symbol and get an AI-powered recommendation
+5. paper     — Run the strategy live on Kite quotes without placing real orders (AI explains each signal)
 ```
 
 ### Available Strategies
@@ -285,6 +287,15 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 [Lawless] > fetch RELIANCE 1day 365
 ⏳ Fetching RELIANCE 1day candles (last 365 days) from Yahoo Finance...
 ✅ Stored 248 candles for RELIANCE (1day)
+
+# (optional) Remove stale data — e.g. clear a specific symbol+interval
+[Lawless] > flush RELIANCE 1day
+⚠️  Delete RELIANCE (1day) from candles table? [y/N]: y
+✅ Deleted 248 candle row(s) for RELIANCE (1day).
+
+# Variants:
+#   flush RELIANCE          — deletes all intervals for RELIANCE
+#   flush                   — deletes the entire candles table (asks for confirmation)
 
 # 2. Run a backtest (long mode — default)
 [Lawless] > backtest ema_cross RELIANCE 1day 365 100000

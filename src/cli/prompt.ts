@@ -10,6 +10,7 @@ import { getTradeHistory, getUsageStats } from "../db/trades";
 import { displayPositions, displayOrders, displayHistory, displayFunds, displayUsage } from "../kite/portfolio";
 import { fetchAndStoreCandles } from "../kite/historical";
 import { getCandles } from "../db/candles";
+import { flushCandles } from "../db/candles";
 import { runBacktest } from "../backtest/engine";
 import { printBacktestSummary, exportBacktestJSON } from "../backtest/reporter";
 import { startPaperTrading } from "../paper/trader";
@@ -55,6 +56,7 @@ function printHelp(): void {
 📐 Algorithmic / Backtesting:
   fetch <SYMBOL> [interval=1day] [days=365]
                           Download OHLCV candles from Yahoo Finance into DB
+  flush [SYMBOL] [interval]  Delete candles from DB (all, per symbol, or per symbol+interval)
   backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000] [mode=long|short]
                           Run backtest and export results to ./exports/
   recommend <SYMBOL> [interval=1day] [days=365]
@@ -77,6 +79,8 @@ function printHelp(): void {
   gtt  delete 123456
   gtts
   fetch RELIANCE 1day 365
+  flush RELIANCE 1day
+  flush RELIANCE
   backtest ema_cross RELIANCE 1day 365 100000
   paper rsi RELIANCE 10
   strategies
@@ -519,6 +523,33 @@ export async function startCLI(): Promise<void> {
         console.log(`⏳ Fetching usage stats for ${userName}...`);
         const stats = await getUsageStats(userId);
         displayUsage(userName, stats);
+        break;
+      }
+
+      case "flush": {
+        const sym = parts[1]?.toUpperCase();
+        const flushInterval = parts[2] as CandleInterval | undefined;
+        const validIntervals: CandleInterval[] = ["1min", "5min", "15min", "1h", "1day"];
+        if (flushInterval && !validIntervals.includes(flushInterval)) {
+          console.log(`❌ Invalid interval '${flushInterval}'. Choose from: ${validIntervals.join(", ")}`);
+          break;
+        }
+
+        const scope = sym && flushInterval
+          ? `${sym} (${flushInterval})`
+          : sym
+          ? `${sym} (all intervals)`
+          : "ALL candles";
+
+        const confirmed = await new Promise<boolean>((resolve) =>
+          rl.question(`⚠️  Delete ${scope} from candles table? [y/N]: `, (a) =>
+            resolve(a.trim().toLowerCase() === "y")
+          )
+        );
+        if (!confirmed) { console.log("Aborted."); break; }
+
+        const deleted = await flushCandles(sym, flushInterval);
+        console.log(`✅ Deleted ${deleted} candle row(s) for ${scope}.`);
         break;
       }
 
