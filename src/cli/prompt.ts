@@ -55,11 +55,11 @@ function printHelp(): void {
 📐 Algorithmic / Backtesting:
   fetch <SYMBOL> [interval=1day] [days=365]
                           Download OHLCV candles from Yahoo Finance into DB
-  backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
+  backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000] [mode=long|short]
                           Run backtest and export results to ./exports/
   recommend <SYMBOL> [interval=1day] [days=365]
                           Run all strategies on a symbol and get AI recommendation
-  paper <STRATEGY> <SYMBOL> [qty=1]
+  paper <STRATEGY> <SYMBOL> [qty=1] [mode=long|short]
                           Live paper trading loop (press Enter to stop)
   strategies              List available strategies
 
@@ -254,6 +254,7 @@ export async function startCLI(): Promise<void> {
 
         if (!symbol || isNaN(qty) || qty <= 0) {
           console.log(`❌ Usage: ${cmd} <SYMBOL> <QTY> [limit <PRICE> | sl <TRIGGER> [<PRICE>]]`);
+          if (cmd === "sell") console.log("   ℹ️  SELL on a flat position places an MIS intraday short.");
           break;
         }
 
@@ -568,6 +569,12 @@ export async function startCLI(): Promise<void> {
         const interval = (parts[3] ?? "1day") as CandleInterval;
         const days = parseInt(parts[4] ?? "365", 10);
         const capital = parseFloat(parts[5] ?? "100000");
+        const modeArg = parts[6]?.toLowerCase();
+        if (modeArg !== undefined && modeArg !== "long" && modeArg !== "short") {
+          console.log(`❌ Invalid mode '${modeArg}'. Use: long  or  short`);
+          break;
+        }
+        const backtestMode = (modeArg ?? "long") as "long" | "short";
 
         const candles = await getCandles(sym, interval);
         if (candles.length < strategy.minBars) {
@@ -584,9 +591,9 @@ export async function startCLI(): Promise<void> {
         const filtered = candles.filter((c) => new Date(c.ts) >= cutoff);
         const workingCandles = filtered.length >= strategy.minBars ? filtered : candles.slice(-Math.max(days, strategy.minBars));
 
-        console.log(`⏳ Running backtest: ${strategy.name} on ${sym.toUpperCase()} (${workingCandles.length} bars, capital ₹${capital.toLocaleString("en-IN")})...`);
+        console.log(`⏳ Running backtest: ${strategy.name} on ${sym.toUpperCase()} (${workingCandles.length} bars, capital ₹${capital.toLocaleString("en-IN")}, mode: ${backtestMode})...`);
         try {
-          const result = runBacktest(strategy, workingCandles, { initialCapital: capital });
+          const result = runBacktest(strategy, workingCandles, { initialCapital: capital, mode: backtestMode });
           printBacktestSummary(result);
           const file = await exportBacktestJSON(result);
           console.log(`📁 Full results exported to: ${file}`);
@@ -738,8 +745,14 @@ export async function startCLI(): Promise<void> {
           console.log("❌ qty must be a positive integer");
           break;
         }
+        const paperModeArg = parts[4]?.toLowerCase();
+        if (paperModeArg !== undefined && paperModeArg !== "long" && paperModeArg !== "short") {
+          console.log(`❌ Invalid mode '${paperModeArg}'. Use: long  or  short`);
+          break;
+        }
+        const paperMode = (paperModeArg ?? "long") as "long" | "short";
         rl.pause();
-        await startPaperTrading(kite, strategy, sym, qty);
+        await startPaperTrading(kite, strategy, sym, qty, paperMode);
         rl.resume();
         break;
       }

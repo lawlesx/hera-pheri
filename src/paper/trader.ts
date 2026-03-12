@@ -21,7 +21,8 @@ export async function startPaperTrading(
   kite: KiteInstance,
   strategy: Strategy,
   symbol: string,
-  qty: number
+  qty: number,
+  mode: "long" | "short" = "long"
 ): Promise<void> {
   const sym = symbol.toUpperCase();
 
@@ -38,13 +39,13 @@ export async function startPaperTrading(
   // Keep a rolling buffer of the last 200 stored bars as warm-up
   const buffer: Candle[] = stored.slice(-200);
 
-  console.log(`\n📡 Paper Trading — ${strategy.name.toUpperCase()} on ${sym} × ${qty}`);
+  console.log(`\n📡 Paper Trading — ${strategy.name.toUpperCase()} on ${sym} × ${qty} [${mode.toUpperCase()} mode]`);
   console.log(`   Loaded ${stored.length} historical candles as warm-up.`);
   console.log("   Press Enter to stop.\n");
 
   let running = true;
   let lastSignal: string | null = null;
-  let position: { action: "BUY"; price: number } | null = null;
+  let position: { direction: "long" | "short"; price: number } | null = null;
 
   // Press Enter stops the loop
   const stdinRl = readline.createInterface({ input: process.stdin });
@@ -86,30 +87,54 @@ export async function startPaperTrading(
           lastSignal = signalKey;
           const time = new Date().toLocaleTimeString("en-IN");
 
-          if (signal.action === "BUY" && position === null) {
-            position = { action: "BUY", price: q.last_price };
-            await logPaperTrade(
-              strategy.name, sym, "BUY", qty, q.last_price, signal.reason, now
-            );
-            console.log(green(`[${time}] 📈 PAPER BUY  ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}`));
-            console.log(`         Reason: ${signal.reason}`);
-            const buyExplanation = await explainSignal(signal, syntheticCandle);
-            if (buyExplanation) console.log(`\n🤖 ${buyExplanation}\n`);
-          } else if (signal.action === "SELL" && position !== null) {
-            const pnl = (q.last_price - position.price) * qty;
-            await logPaperTrade(
-              strategy.name, sym, "SELL", qty, q.last_price, signal.reason, now
-            );
-            console.log(yellow(`[${time}] 📉 PAPER SELL ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}  P&L: ₹${pnl.toFixed(2)}`));
-            console.log(`         Reason: ${signal.reason}`);
-            const sellExplanation = await explainSignal(signal, syntheticCandle);
-            if (sellExplanation) console.log(`\n🤖 ${sellExplanation}\n`);
-            position = null;
+          if (mode === "long") {
+            if (signal.action === "BUY" && position === null) {
+              position = { direction: "long", price: q.last_price };
+              await logPaperTrade(
+                strategy.name, sym, "BUY", qty, q.last_price, signal.reason, now
+              );
+              console.log(green(`[${time}] 📈 PAPER BUY  ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}`));
+              console.log(`         Reason: ${signal.reason}`);
+              const explanation = await explainSignal(signal, syntheticCandle);
+              if (explanation) console.log(`\n🤖 ${explanation}\n`);
+            } else if (signal.action === "SELL" && position !== null) {
+              const pnl = (q.last_price - position.price) * qty;
+              await logPaperTrade(
+                strategy.name, sym, "SELL", qty, q.last_price, signal.reason, now
+              );
+              console.log(yellow(`[${time}] 📉 PAPER SELL ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}  P&L: ₹${pnl.toFixed(2)}`));
+              console.log(`         Reason: ${signal.reason}`);
+              const explanation = await explainSignal(signal, syntheticCandle);
+              if (explanation) console.log(`\n🤖 ${explanation}\n`);
+              position = null;
+            }
+          } else {
+            // short mode: SELL enters short, BUY covers
+            if (signal.action === "SELL" && position === null) {
+              position = { direction: "short", price: q.last_price };
+              await logPaperTrade(
+                strategy.name, sym, "SELL", qty, q.last_price, signal.reason, now
+              );
+              console.log(yellow(`[${time}] 📉 PAPER SHORT ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}`));
+              console.log(`         Reason: ${signal.reason}`);
+              const explanation = await explainSignal(signal, syntheticCandle);
+              if (explanation) console.log(`\n🤖 ${explanation}\n`);
+            } else if (signal.action === "BUY" && position !== null) {
+              const pnl = (position.price - q.last_price) * qty;
+              await logPaperTrade(
+                strategy.name, sym, "BUY", qty, q.last_price, signal.reason, now
+              );
+              console.log(green(`[${time}] 📈 PAPER COVER ${sym} × ${qty} @ ₹${q.last_price.toFixed(2)}  P&L: ₹${pnl.toFixed(2)}`));
+              console.log(`         Reason: ${signal.reason}`);
+              const explanation = await explainSignal(signal, syntheticCandle);
+              if (explanation) console.log(`\n🤖 ${explanation}\n`);
+              position = null;
+            }
           }
         } else {
           const time = new Date().toLocaleTimeString("en-IN");
           process.stdout.write(
-            `\r[${time}]  ${sym} ₹${q.last_price.toFixed(2)}  ${position ? "📂 IN POSITION" : "⬜ FLAT"}  (no signal)  `
+            `\r[${time}]  ${sym} ₹${q.last_price.toFixed(2)}  ${position ? (position.direction === "short" ? "📋 SHORT" : "📂 LONG") : "⬜ FLAT"}  (no signal)  `
           );
         }
       }

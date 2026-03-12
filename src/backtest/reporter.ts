@@ -39,8 +39,8 @@ export function printBacktestSummary(result: BacktestResult): void {
   if (result.trades.length > 0) {
     console.log("\n📋 Last 10 Trades:\n");
     const C = 12;
-    console.log(["Entry", "Exit", "Buy@", "Sell@", "Qty", "P&L"].map((h) => col(h, C)).join(""));
-    console.log("─".repeat(C * 6));
+      console.log(["Entry", "Exit", "Dir", "Entry@", "Exit@", "Qty", "P&L"].map((h) => col(h, C)).join(""));
+      console.log("─".repeat(C * 7));
     const recent = result.trades.slice(-10);
     for (const t of recent) {
       const pnlStr = t.pnl != null ? `₹${Math.round(t.pnl)}` : "OPEN";
@@ -48,6 +48,7 @@ export function printBacktestSummary(result: BacktestResult): void {
       console.log(
         col((t.entryTs ?? "").slice(0, 10), C) +
           col((t.exitTs ?? "OPEN").slice(0, 10), C) +
+          col(t.action === "BUY" ? "L" : "S", C) +
           col(`₹${t.entryPrice.toFixed(0)}`, C) +
           col(t.exitPrice != null ? `₹${t.exitPrice.toFixed(0)}` : "-", C) +
           col(String(t.qty), C) +

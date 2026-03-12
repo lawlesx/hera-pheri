@@ -130,11 +130,12 @@ history                                    Show your last 20 trades
 funds                                      Show available cash & margin (equity segment)
 usage                                      Order counts (today/week/month/all-time) + estimated brokerage
 fetch <SYMBOL> [interval=1day] [days=365]  Download OHLCV candles from Yahoo Finance into DB
-backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000]
+backtest <STRATEGY> <SYMBOL> [interval=1day] [days=365] [capital=100000] [mode=long|short]
                                            Run a backtest, export results, and get AI analysis
 recommend <SYMBOL> [interval=1day] [days=365]
                                            Run all strategies on a symbol and get AI strategy recommendation
-paper <STRATEGY> <SYMBOL> [qty=1]          Live paper-trading loop on a strategy (press Enter to stop)
+paper <STRATEGY> <SYMBOL> [qty=1] [mode=long|short]
+                                           Live paper-trading loop on a strategy (press Enter to stop)
 strategies                                 List all available strategies with descriptions
 help                                       Show command reference
 ref                                        Glossary — order types, GTT params, MIS/CNC explained
@@ -142,6 +143,7 @@ exit                                       Exit the bot
 ```
 
 > ⚠️ Regular `buy`/`sell` orders use **MIS (Margin Intraday Square-off)** — auto-closed by Zerodha at 3:25 PM IST.
+> A `sell` on a **flat position** places an intraday short (MIS short-selling). Zerodha handles margining automatically.
 > GTT orders use **CNC (Delivery)** and persist across sessions until triggered or deleted.
 
 ### Target & Stoploss on Entry
@@ -284,9 +286,9 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
 ⏳ Fetching RELIANCE 1day candles (last 365 days) from Yahoo Finance...
 ✅ Stored 248 candles for RELIANCE (1day)
 
-# 2. Run a backtest
+# 2. Run a backtest (long mode — default)
 [Lawless] > backtest ema_cross RELIANCE 1day 365 100000
-⏳ Running backtest: ema_cross on RELIANCE (248 bars, capital ₹1,00,000)...
+⏳ Running backtest: ema_cross on RELIANCE (248 bars, capital ₹1,00,000, mode: long)...
 
 📊 Backtest Results — EMA_CROSS on RELIANCE (1day)
    Period: 2025-03-11 → 2026-03-11
@@ -300,7 +302,18 @@ The bot includes a full backtesting pipeline and paper-trading loop on top of th
   Win Rate             62.5%
   Total Trades         8
 ────────────────────────────────────────────────────────
+
+📋 Last 10 Trades:
+Entry       Exit        Dir         Entry@      Exit@       Qty         P&L
+────────────────────────────────────────────────────────────────────────────────────
+2025-09-01  2025-10-15  L           ₹2801       ₹2942       35          ₹4928
+...
+
 📁 Full results exported to: ./exports/backtest_ema_cross_RELIANCE_2026-03-11.json
+
+# 2b. Run a short-mode backtest
+[Lawless] > backtest ema_cross RELIANCE 1day 365 100000 short
+⏳ Running backtest: ema_cross on RELIANCE (248 bars, capital ₹1,00,000, mode: short)...
 
 ⏳ Asking AI for analysis...
 
@@ -325,12 +338,23 @@ ema_cross     +18.3%        +18.3%        0.87          -9.1%         62%
 
 ✅ Best: ema_cross — the highest Sharpe ratio means the best risk-adjusted return...
 
-# 4. Paper trade live
+# 4. Paper trade live (long mode — default)
 [Lawless] > paper rsi RELIANCE 10
-📡 Paper Trading — RSI on RELIANCE × 10
+📡 Paper Trading — RSI on RELIANCE × 10 [LONG mode]
    (Press Enter to stop)
 
 [14:23:45] 📈 PAPER BUY  RELIANCE × 10 @ ₹2500.50
+           Reason: RSI(14) crossed above 30 (oversold reversal: 31.4)
+
+# 4b. Paper trade live (short mode)
+[Lawless] > paper rsi RELIANCE 10 short
+📡 Paper Trading — RSI on RELIANCE × 10 [SHORT mode]
+   (Press Enter to stop)
+
+[14:23:45] 📉 PAPER SHORT RELIANCE × 10 @ ₹2500.50
+           Reason: RSI(14) crossed below 70 (overbought reversal: 68.1)
+
+[14:31:12] 📈 PAPER COVER RELIANCE × 10 @ ₹2480.00  P&L: ₹205.00
            Reason: RSI(14) crossed above 30 (oversold reversal: 31.4)
 
 🤖 The RSI just bounced off the oversold zone (below 30) and crossed back above it — this means selling pressure has exhausted and buyers are stepping in. The signal is moderately strong as RSI has room to run toward 70...
@@ -341,7 +365,9 @@ ema_cross     +18.3%        +18.3%        0.87          -9.1%         62%
 - **No look-ahead bias** — signals are generated on bar close; fills happen at the next bar's open price
 - **Commission** — flat ₹20 per order leg (matches the `usage` command estimate)
 - **Position sizing** — 100% of available capital by default; configurable via `positionSizePct` in the engine
-- **Exported JSON** includes full trade log, equity curve, and all metrics for further analysis
+- **Long mode (default)** — BUY signal enters a long; SELL signal exits. Only one position at a time.
+- **Short mode** — SELL signal enters a short (sell first, buy later); BUY signal covers. PnL = `(entry − exit) × qty − 2×commission`. MTM equity accounts for the short direction.
+- **Exported JSON** includes full trade log, equity curve, and all metrics for further analysis; trade table shows `L`/`S` in the **Dir** column
 - **AI analysis** — after every backtest, Ollama interprets the metrics and gives a plain-English verdict (requires Ollama running locally)
 
 ### AI Features (Ollama)
@@ -405,11 +431,11 @@ hera-pheri/
 │   │   ├── donchian.ts   # Donchian Channel(20) breakout
 │   │   └── vwap.ts       # Rolling VWAP(20) crossover
 │   ├── backtest/
-│   │   ├── engine.ts     # runBacktest() — bar-by-bar simulation, fills at next-bar-open
+│   │   ├── engine.ts     # runBacktest() — bar-by-bar simulation, fills at next-bar-open; supports long/short mode
 │   │   ├── metrics.ts    # calcSharpe, calcCAGR, calcMaxDrawdown, calcWinRate
-│   │   └── reporter.ts   # CLI summary table + JSON export to ./exports/
+│   │   └── reporter.ts   # CLI summary table (with Dir column) + JSON export to ./exports/
 │   ├── paper/
-│   │   └── trader.ts     # Live paper-trading loop — polls Kite quotes, logs to DB, explains signals
+│   │   └── trader.ts     # Live paper-trading loop — polls Kite quotes, long/short mode, logs to DB, explains signals
 │   ├── llm/
 │   │   ├── client.ts     # callOllama() — wraps Ollama /api/generate REST endpoint
 │   │   ├── prompts.ts    # Prompt builders for each AI use case
